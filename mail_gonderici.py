@@ -265,7 +265,7 @@ def is_valid_email(email):
 
 # ================== SIDEBAR ==================
 with st.sidebar:
-    st.title("⚡ IEEE SponsorBot")
+    st.title("⚡ Heptapus SponsorBot")
     
     with st.expander("📬 SMTP Hesapları", expanded=True):
         st.info("Havuzdaki hesaplar sırayla kullanılır.")

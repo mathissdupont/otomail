@@ -1,0 +1,25 @@
+[
+    {
+        "name": "⚡ IEEE - Genel Yıllık Sponsorluk",
+        "subject": "İş Birliği Fırsatı: {Sirket} & IEEE {CLUB_NAME}",
+        "body": "\n<div style=\"font-family: Arial, sans-serif; color: #333; line-height: 1.6;\">\n    <h2 style=\"color: #00629B;\">Geleceği Birlikte Şekillendirelim!</h2>\n    <p>Sayın <strong>{Yetkili}</strong>,</p>\n    \n    <p>Dünyanın en büyük teknik organizasyonu olan <strong>IEEE</strong>'nin, kampüsümüzdeki temsilcisi <strong>{CLUB_NAME}</strong> olarak, mühendislik ve teknoloji tutkunu öğrencilerle sektörü bir araya getirmeye devam ediyoruz.</p>\n    \n    <p><strong>{Sirket}</strong> olarak sektördeki öncü konumunuz ve inovatif yaklaşımınız, üyelerimiz için büyük bir ilham kaynağıdır.</p>\n    \n    <div style=\"background: #f4f4f4; border-left: 5px solid #00629B; padding: 15px; margin: 20px 0;\">\n        <strong>Neden Partnerimiz Olmalısınız?</strong>\n        <ul>\n            <li><strong>Erişim:</strong> Yıllık 5.000+ mühendislik öğrencisine doğrudan ulaşım.</li>\n            <li><strong>Marka Bilinirliği:</strong> Kampüs içi tüm etkinliklerde logo ve stant görünürlüğü.</li>\n            <li><strong>Yetenek Keşfi:</strong> Başarılı öğrencilerle staj ve işe alım süreçleri için networking.</li>\n        </ul>\n    </div>\n    \n    <p>Yeni dönemde sizi <strong>\"Ana Sponsorumuz\"</strong> olarak yanımızda görmekten onur duyarız. Detaylı sponsorluk dosyamız ektedir.</p>\n    \n    <p>Geri dönüşünüzü heyecanla bekliyoruz.</p>\n    <br>\n    <p>Saygılarımla,<br><strong>IEEE Yönetim Kurulu</strong></p>\n</div>\n"
+    },
+    {
+        "name": "🚀 IEEE - Kariyer Zirvesi Daveti",
+        "subject": "Davet: Teknoloji ve Kariyer Zirvesi'nde Yeriniz Hazır mı?",
+        "body": "\n<div style=\"font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333;\">\n    <h2 style=\"color: #E91D33;\">Campus Tech Summit'e Davetlisiniz!</h2>\n    <p>Sayın <strong>{Yetkili}</strong>,</p>\n    \n    <p>Bu yıl X. kez düzenleyeceğimiz, üniversitenin en büyük teknoloji etkinliği olan <strong>Tech Summit</strong> için geri sayım başladı!</p>\n    \n    <p><strong>{Sirket}</strong> ekibini, sektör tecrübelerini aktarmak ve geleceğin mühendisleriyle tanışmak üzere etkinliğimize davet ediyoruz.</p>\n    \n    <table style=\"width:100%; margin: 20px 0; border-collapse: collapse;\">\n        <tr style=\"background-color: #eee;\">\n            <td style=\"padding: 10px; border: 1px solid #ddd;\">📅 <strong>Tarih:</strong> [Tarih Giriniz]</td>\n            <td style=\"padding: 10px; border: 1px solid #ddd;\">📍 <strong>Yer:</strong> [Mekan Giriniz]</td>\n        </tr>\n    </table>\n    \n    <p><strong>Sponsorluk Kapsamında:</strong></p>\n    <ul>\n        <li>Ana sahnede konuşma (Keynote) hakkı</li>\n        <li>Fuaye alanında İK standı</li>\n        <li>Workshop salonu kullanımı</li>\n    </ul>\n    \n    <p>Katılım koşulları ve detaylar için ekteki dosyayı inceleyebilirsiniz.</p>\n    <p>Saygılarımızla.</p>\n</div>\n"
+    },
+    {
+        "name": "💻 IEEE - Hackathon / Kodlama Yarışması",
+        "subject": "{Sirket} ile Kodluyoruz: Hackathon Sponsorluğu",
+        "body": "\n<div style=\"font-family: monospace; color: #333;\">\n    <h2 style=\"color: #28a745;\">&lt;CodeTheFuture /&gt;</h2>\n    <p>Merhaba <strong>{Yetkili}</strong>,</p>\n    \n    <p>Öğrencilerin 24 saat boyunca aralıksız kod yazarak projeler geliştireceği <strong>Hackathon</strong> etkinliğimiz yaklaşıyor.</p>\n    \n    <p><strong>{Sirket}</strong> API'lerini veya teknolojilerini kullanarak öğrencilerin neler yaratabileceğini görmek istemez misiniz?</p>\n    \n    <p><strong>Destek Alanları:</strong></p>\n    <ul>\n        <li>Ödül Sponsorluğu (Bilgisayar, Ekipman vb.)</li>\n        <li>Mentorluk Desteği (Yazılımcılarınızın ekiplere desteği)</li>\n        <li>Pizza/İçecek Sponsorluğu 🍕</li>\n    </ul>\n    \n    <p>Yazılım dünyasının yeni yıldızlarını keşfetmek için sizi de aramızda görmek istiyoruz.</p>\n    <br>\n    <p><strong>IEEE Computer Society</strong></p>\n</div>\n"
+    },
+    {
+        "name": "🎓 IEEE - Workshop / Eğitim",
+        "subject": "Teknik Eğitim İş Birliği: {Sirket} Academy",
+        "body": "\n<div style=\"font-family: Arial, sans-serif; color: #333;\">\n    <h2 style=\"color: #ff9800;\">Pratikten Teoriye: Teknik Workshop Serisi</h2>\n    <p>Sayın <strong>{Yetkili}</strong>,</p>\n    \n    <p>Teorik bilgileri pratikle birleştirmek amacıyla düzenlediğimiz workshop serimizde, <strong>{Sirket}</strong> uzmanlarını kampüsümüzde ağırlamak istiyoruz.</p>\n    \n    <p>Öğrencilerimize <strong>[Konu Başlığı: Örn. Yapay Zeka / Cloud / Siber Güvenlik]</strong> alanında vereceğiniz yarım günlük bir eğitim, markanızın kampüsteki teknik bilinirliğini zirveye taşıyacaktır.</p>\n    \n    <p>Uygun olduğunuz bir tarihte detayları görüşmek dileğiyle.</p>\n    <br>\n    <p>Saygılarımla,</p>\n</div>\n"
+    },
+    {
+        
+    }
+]

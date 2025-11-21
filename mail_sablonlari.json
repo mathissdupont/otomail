@@ -18,8 +18,5 @@
         "name": "🎓 IEEE - Workshop / Eğitim",
         "subject": "Teknik Eğitim İş Birliği: {Sirket} Academy",
         "body": "\n<div style=\"font-family: Arial, sans-serif; color: #333;\">\n    <h2 style=\"color: #ff9800;\">Pratikten Teoriye: Teknik Workshop Serisi</h2>\n    <p>Sayın <strong>{Yetkili}</strong>,</p>\n    \n    <p>Teorik bilgileri pratikle birleştirmek amacıyla düzenlediğimiz workshop serimizde, <strong>{Sirket}</strong> uzmanlarını kampüsümüzde ağırlamak istiyoruz.</p>\n    \n    <p>Öğrencilerimize <strong>[Konu Başlığı: Örn. Yapay Zeka / Cloud / Siber Güvenlik]</strong> alanında vereceğiniz yarım günlük bir eğitim, markanızın kampüsteki teknik bilinirliğini zirveye taşıyacaktır.</p>\n    \n    <p>Uygun olduğunuz bir tarihte detayları görüşmek dileğiyle.</p>\n    <br>\n    <p>Saygılarımla,</p>\n</div>\n"
-    },
-    {
-        
     }
 ]

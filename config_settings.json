@@ -1,1 +1,9 @@
-{"server": "smtp.gmail.com", "delay_min": 5, "delay_max": 15}
+{
+	"smtp_defaults": {
+		"server": "smtp.gmail.com",
+		"port": 587,
+		"delay_min": 5,
+		"delay_max": 15
+	},
+	"users": []
+}

@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 import hashlib
 import hmac
 import random
+import requests # WorldPass için gerekli
 
 # ================== AYARLAR & KONFİGÜRASYON ==================
 st.set_page_config(
@@ -27,6 +28,10 @@ HISTORY_FILE = "gonderim_gecmisi.json"
 CONFIG_FILE = "config_settings.json"
 TEMPLATE_FILE = "mail_sablonlari.json"
 
+# WorldPass Ayarları (GERİ GELDİ)
+WORLDPASS_LOGIN_URL = "https://worldpass-beta.heptapusgroup.com/api/user/login"
+ADMIN_EMAILS = ["sametutku64@gmail.com"]
+
 # SMTP Sağlayıcı Ayarları (Hazır Listesi)
 SMTP_PRESETS = {
     "Özel (Manuel Ayar)": {"host": "", "port": 587},
@@ -38,7 +43,7 @@ SMTP_PRESETS = {
     "Zoho Mail": {"host": "smtp.zoho.com", "port": 587}
 }
 
-# ================== CSS (UI/UX İyileştirmeleri) ==================
+# ================== CSS (UI/UX) ==================
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
@@ -86,15 +91,16 @@ st.markdown("""
         border-right: 1px solid var(--border);
     }
     
-    /* Metrikler */
-    div[data-testid="stMetric"] {
-        background-color: var(--card-bg);
+    /* Login Box */
+    .login-box {
+        background: var(--card-bg);
+        padding: 40px;
+        border-radius: 16px;
         border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 10px;
+        text-align: center;
+        max-width: 450px;
+        margin: 50px auto;
     }
-    div[data-testid="stMetricLabel"] p { color: #94a3b8 !important; }
-    div[data-testid="stMetricValue"] div { color: white !important; }
 
     /* Hero Alanı */
     .hero {
@@ -105,8 +111,6 @@ st.markdown("""
         margin-bottom: 24px;
         border: 1px solid rgba(255,255,255,0.1);
     }
-    .hero h1 { color: white !important; margin: 0; font-size: 1.8rem; }
-    .hero p { color: #dbeafe !important; margin: 5px 0 0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -137,6 +141,25 @@ def render_template(text, row_data, global_ctx):
 def is_valid_email(email):
     return bool(re.fullmatch(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b', str(email)))
 
+# --- WORLDPASS API FONKSİYONU ---
+def worldpass_login(email: str, password: str):
+    try:
+        resp = requests.post(
+            WORLDPASS_LOGIN_URL,
+            json={"email": email, "password": password},
+            timeout=10
+        )
+        if resp.status_code != 200:
+            return None, f"Giriş Başarısız: Sunucu Hatası ({resp.status_code})"
+        
+        data = resp.json()
+        if "user" not in data:
+            return None, "Hatalı cevap formatı."
+            
+        return data, None
+    except Exception as e:
+        return None, f"Bağlantı Hatası: {e}"
+
 # ================== STATE BAŞLATMA ==================
 if "current_user" not in st.session_state: st.session_state.current_user = None
 if "smtp_accounts" not in st.session_state: st.session_state.smtp_accounts = []
@@ -148,27 +171,66 @@ if "email_column" not in st.session_state: st.session_state.email_column = None
 config = load_json(CONFIG_FILE)
 if not config: config = {"users": [], "smtp_defaults": {"server": "smtp.gmail.com", "port": 587}}
 
-# ================== 1. GİRİŞ EKRANI ==================
+# ================== 1. GİRİŞ EKRANI (WorldPass Geri Geldi) ==================
 if not st.session_state.current_user:
-    if not config.get("users"):
-        st.warning("⚠️ Kullanıcı yok. config_settings.json'a kullanıcı ekleyin.")
-        st.stop()
-
-    c1, c2, c3 = st.columns([1, 2, 1])
-    with c2:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        st.markdown("<div class='stCard' style='text-align:center;'><h2>🧬 SponsorBot Giriş</h2></div>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("""
+        <div class='login-box'>
+            <h1 style='color:#3b82f6 !important; margin:0;'>🧬 Heptapus</h1>
+            <h3 style='font-weight:400; color:white !important; margin-top:5px;'>SponsorBot Giriş</h3>
+            <p style='color:#94a3b8 !important;'>WorldPass veya Yerel Hesap ile devam et</p>
+        </div>
+        """, unsafe_allow_html=True)
         
-        with st.form("login"):
-            u = st.text_input("Kullanıcı Adı")
-            p = st.text_input("Şifre", type="password")
-            if st.form_submit_button("Giriş Yap", type="primary"):
-                user_found = next((user for user in config["users"] if user["username"] == u), None)
-                if user_found and verify_password(p, user_found.get("password_hash", "")):
-                    st.session_state.current_user = user_found
-                    st.rerun()
-                else:
-                    st.error("Hatalı bilgiler.")
+        tab_local, tab_wp = st.tabs(["🔐 Yerel Giriş", "🌍 WorldPass"])
+        
+        # --- YEREL GİRİŞ ---
+        with tab_local:
+            with st.form("login_local"):
+                u = st.text_input("Kullanıcı Adı")
+                p = st.text_input("Şifre", type="password")
+                if st.form_submit_button("Giriş Yap (Yerel)", type="primary"):
+                    if not config.get("users"):
+                        st.error("Yerel kullanıcı bulunamadı.")
+                    else:
+                        user_found = next((user for user in config["users"] if user["username"] == u), None)
+                        if user_found and verify_password(p, user_found.get("password_hash", "")):
+                            st.session_state.current_user = user_found
+                            st.rerun()
+                        else:
+                            st.error("Hatalı kullanıcı adı veya şifre.")
+
+        # --- WORLDPASS GİRİŞ (GERİ GELDİ) ---
+        with tab_wp:
+            st.info("Heptapus ID'niz ile giriş yapın.")
+            with st.form("login_wp"):
+                wp_email = st.text_input("WorldPass Email")
+                wp_pass = st.text_input("Şifre", type="password")
+                if st.form_submit_button("WorldPass ile Bağlan", type="primary"):
+                    if not wp_email or not wp_pass:
+                        st.error("Alanları doldurun.")
+                    else:
+                        data, err = worldpass_login(wp_email.strip(), wp_pass)
+                        if err:
+                            st.error(err)
+                        else:
+                            user_info = data.get("user", {})
+                            email = user_info.get("email", wp_email).lower()
+                            
+                            # Admin kontrolü
+                            mapped_role = "admin" if email in [e.lower() for e in ADMIN_EMAILS] else "sender"
+                            
+                            st.session_state.current_user = {
+                                "username": email,
+                                "role": mapped_role,
+                                "auth_type": "worldpass",
+                                "wp_token": data.get("token")
+                            }
+                            st.success("WorldPass bağlantısı başarılı!")
+                            time.sleep(1)
+                            st.rerun()
     st.stop()
 
 # ================== 2. ANA PANEL ==================
@@ -182,7 +244,7 @@ global_ctx = {
 # --- SIDEBAR (Gelişmiş SMTP Yönetimi) ---
 with st.sidebar:
     st.markdown(f"### 👤 {user['username']}")
-    st.caption(f"Yetki: {role.upper()}")
+    st.caption(f"Yöntem: {user.get('auth_type', 'local').upper()}")
     
     if st.button("Çıkış Yap"):
         st.session_state.current_user = None
@@ -195,7 +257,6 @@ with st.sidebar:
         # Hazır Sağlayıcı Seçimi
         provider = st.selectbox("E-posta Sağlayıcısı", list(SMTP_PRESETS.keys()))
         
-        # Seçime göre defaultları doldur
         default_host = SMTP_PRESETS[provider]["host"]
         default_port = SMTP_PRESETS[provider]["port"]
         
@@ -204,27 +265,25 @@ with st.sidebar:
         
         st.caption("Giriş Bilgileri")
         em = st.text_input("E-posta Adresi")
-        pw = st.text_input("Uygulama Şifresi", type="password", help="Gmail/Outlook için 'App Password' oluşturmanız gerekebilir.")
+        pw = st.text_input("Uygulama Şifresi", type="password", help="Gmail/Outlook için 'App Password' gerekir.")
         
         if st.button("Kaydet ve Test Et"):
             if not em or not pw:
                 st.error("E-posta ve şifre zorunlu.")
             else:
                 try:
-                    # Bağlantı testi
                     s = smtplib.SMTP(srv, prt)
                     s.starttls()
                     s.login(em, pw)
                     s.quit()
                     
                     st.session_state.smtp_accounts.append({"server": srv, "port": prt, "email": em, "password": pw})
-                    st.success("✅ Bağlantı başarılı! Hesap eklendi.")
+                    st.success("✅ Hesap eklendi.")
                     time.sleep(1)
                     st.rerun()
                 except Exception as e:
                     st.error(f"Bağlantı Hatası: {e}")
 
-    # Ekli Hesapları Listele
     if st.session_state.smtp_accounts:
         st.markdown("#### Aktif Hesaplar")
         for i, acc in enumerate(st.session_state.smtp_accounts):
@@ -241,7 +300,7 @@ with st.sidebar:
 st.markdown(f"""
 <div class='hero'>
     <h1>Heptapus Kontrol Paneli</h1>
-    <p>Akıllı zamanlama ve kolay gönderim arayüzü.</p>
+    <p>WorldPass Entegrasyonu Aktif. Akıllı Zamanlayıcı Hazır.</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -318,7 +377,7 @@ with tab_template:
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-# ================== TAB 3: GÖNDERİM (ZAMANLAYICI EKLENDİ) ==================
+# ================== TAB 3: GÖNDERİM ==================
 with tab_send:
     st.markdown("<div class='stCard'>", unsafe_allow_html=True)
     
@@ -334,7 +393,7 @@ with tab_send:
         
         # Zamanlayıcı UI
         if enable_schedule:
-            st.info("ℹ️ Zamanlayıcı çalışırken bu sekmeyi kapatmayın. Arka planda saymaya devam edecektir.")
+            st.info("ℹ️ Zamanlayıcı çalışırken bu sekmeyi kapatmayın.")
             sc1, sc2 = st.columns(2)
             sch_date = sc1.date_input("Tarih", datetime.now())
             sch_time = sc2.time_input("Saat", (datetime.now() + timedelta(minutes=10)).time())
@@ -349,17 +408,17 @@ with tab_send:
         btn_text = f"⏳ {start_time.strftime('%d.%m %H:%M')} İçin Planla" if enable_schedule else "🚀 Hemen Gönder"
         
         if st.button(btn_text, type="primary"):
-            # Zamanlayıcı Bekleme Döngüsü
+            # Zamanlayıcı Bekleme
             if enable_schedule:
                 placeholder = st.empty()
                 while datetime.now() < start_time:
                     diff = start_time - datetime.now()
-                    placeholder.warning(f"⏳ Gönderime kalan süre: {str(diff).split('.')[0]} \n\n⚠️ Lütfen tarayıcıyı kapatmayın!")
+                    placeholder.warning(f"⏳ Kalan Süre: {str(diff).split('.')[0]}")
                     time.sleep(1)
                 placeholder.empty()
 
             # GÖNDERİM BAŞLIYOR
-            st.toast("Gönderim işlemi başladı!")
+            st.toast("Gönderim başladı!")
             status_container = st.status("Gönderim Durumu", expanded=True)
             df_target = st.session_state.loaded_data
             total = len(df_target)
@@ -392,12 +451,11 @@ with tab_send:
                 stat_code = "UNKNOWN"
                 
                 if is_dry_run:
-                    status_container.write(f"📝 [Test] {email} hazırlandı.")
+                    status_container.write(f"📝 [Test] {email}")
                     stat_code = "SIMULATED"
                     time.sleep(0.05)
                 else:
                     try:
-                        # Random Delay (Anti-Spam)
                         delay = random.uniform(2.0, 5.0) 
                         time.sleep(delay)
                         
@@ -417,7 +475,7 @@ with tab_send:
                                 msg.attach(part)
                                 
                         acc['c'].sendmail(acc['e'], email, msg.as_string())
-                        status_container.write(f"✅ Gönderildi: {email} (Gecikme: {delay:.1f}s)")
+                        status_container.write(f"✅ Gönderildi: {email} ({delay:.1f}s)")
                         stat_code = "SENT_OK"
                         success += 1
                     except Exception as e:
@@ -434,7 +492,7 @@ with tab_send:
                 existing.extend(logs)
                 save_json(HISTORY_FILE, existing)
 
-            status_container.update(label=f"Tamamlandı! {success}/{total} Başarılı", state="complete")
+            status_container.update(label=f"Bitti! {success}/{total} Başarılı", state="complete")
             st.balloons()
             
     st.markdown("</div>", unsafe_allow_html=True)

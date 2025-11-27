@@ -10,6 +10,7 @@ import json
 import os
 import re
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import hashlib
 import hmac
 import random
@@ -17,7 +18,7 @@ import requests # WorldPass için gerekli
 
 # ================== AYARLAR & KONFİGÜRASYON ==================
 st.set_page_config(
-    page_title="Heptapus SponsorBot Pro",
+    page_title="Heptapus SponsorBot",
     layout="wide",
     page_icon="🧬",
     initial_sidebar_state="expanded"
@@ -27,6 +28,8 @@ st.set_page_config(
 HISTORY_FILE = "gonderim_gecmisi.json"
 CONFIG_FILE = "config_settings.json"
 TEMPLATE_FILE = "mail_sablonlari.json"
+
+IST_TZ = ZoneInfo("Europe/Istanbul")
 
 # WorldPass Ayarları (GERİ GELDİ)
 WORLDPASS_LOGIN_URL = "https://worldpass-beta.heptapusgroup.com/api/user/login"
@@ -111,6 +114,17 @@ st.markdown("""
         margin-bottom: 24px;
         border: 1px solid rgba(255,255,255,0.1);
     }
+    .placeholder-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        margin: 4px 6px 0 0;
+        border-radius: 999px;
+        background: rgba(59,130,246,0.15);
+        color: #bfdbfe;
+        font-size: 0.8rem;
+        border: 1px solid rgba(59,130,246,0.3);
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -140,6 +154,20 @@ def render_template(text, row_data, global_ctx):
 
 def is_valid_email(email):
     return bool(re.fullmatch(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b', str(email)))
+
+def parse_email_list(raw_text: str):
+    emails, invalids = [], []
+    if not raw_text:
+        return emails, invalids
+    for part in raw_text.split(","):
+        candidate = part.strip()
+        if not candidate:
+            continue
+        if is_valid_email(candidate):
+            emails.append(candidate)
+        else:
+            invalids.append(candidate)
+    return emails, invalids
 
 # --- WORLDPASS API FONKSİYONU ---
 def worldpass_login(email: str, password: str):
@@ -178,7 +206,7 @@ if not st.session_state.current_user:
     with col2:
         st.markdown("""
         <div class='login-box'>
-            <h1 style='color:#3b82f6 !important; margin:0;'>🧬 Heptapus</h1>
+            <h1 style='color:#3b82f6 !important; margin:0;'>🧬-Heptapus/Sponsorbot</h1>
             <h3 style='font-weight:400; color:white !important; margin-top:5px;'>SponsorBot Giriş</h3>
             <p style='color:#94a3b8 !important;'>WorldPass veya Yerel Hesap ile devam et</p>
         </div>
@@ -204,7 +232,7 @@ if not st.session_state.current_user:
 
         # --- WORLDPASS GİRİŞ (GERİ GELDİ) ---
         with tab_wp:
-            st.info("Heptapus ID'niz ile giriş yapın.")
+            st.info("Worldpass ID'niz ile giriş yapın.")
             with st.form("login_wp"):
                 wp_email = st.text_input("WorldPass Email")
                 wp_pass = st.text_input("Şifre", type="password")
@@ -237,7 +265,8 @@ if not st.session_state.current_user:
 user = st.session_state.current_user
 role = user.get("role", "sender")
 global_ctx = {
-    "TODAY": datetime.now().strftime("%d.%m.%Y"),
+    "TODAY": datetime.now(IST_TZ).strftime("%d.%m.%Y"),
+    "NOW_TR": datetime.now(IST_TZ).strftime("%d.%m.%Y %H:%M"),
     "CLUB": "Heptapus Group"
 }
 
@@ -299,8 +328,8 @@ with st.sidebar:
 # --- HEADER ---
 st.markdown(f"""
 <div class='hero'>
-    <h1>Heptapus Kontrol Paneli</h1>
-    <p>WorldPass Entegrasyonu Aktif. Akıllı Zamanlayıcı Hazır.</p>
+    <h1>Sponsorbot Kontrol Paneli</h1>
+    <p>Maillerinizi yönlendirin.</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -350,6 +379,22 @@ with tab_template:
         st.session_state.mail_subject = st.text_input("Konu", st.session_state.mail_subject)
         st.session_state.mail_body = st.text_area("İçerik (HTML)", st.session_state.mail_body, height=300)
         st.session_state.files = st.file_uploader("Dosya Ekleri", accept_multiple_files=True)
+        if st.session_state.loaded_data is not None:
+            available_cols = list(st.session_state.loaded_data.columns)
+            prev_selected = [c for c in st.session_state.get("selected_columns", []) if c in available_cols]
+            default_pick = prev_selected if prev_selected else available_cols[:min(3, len(available_cols))]
+            selected_cols = st.multiselect(
+                "Dinamik Sütunlar",
+                options=available_cols,
+                default=default_pick,
+                help="Seçtiğin sütunları metin içinde {SutunAdi} şeklinde kullanabilirsin."
+            )
+            st.session_state.selected_columns = selected_cols
+            if selected_cols:
+                chips_html = "".join([f"<span class='placeholder-chip'>{{{{{col}}}}}</span>" for col in selected_cols])
+                st.markdown(f"<div style='margin-top:8px;'>{chips_html}</div>", unsafe_allow_html=True)
+        else:
+            st.caption("Veri yüklediğinde sütun isimlerini burada görebilirsin.")
         st.markdown("</div>", unsafe_allow_html=True)
     
     with col_man:
@@ -389,17 +434,27 @@ with tab_send:
         is_dry_run = c2.toggle("Dry Run (Test)", value=True)
         enable_schedule = c3.toggle("🕒 Zamanla", value=False)
 
-        start_time = datetime.now()
+        cc_raw = st.text_input(
+            "CC Adresleri (virgülle ayır)",
+            value=st.session_state.get("cc_raw", ""),
+            placeholder="ekip@firma.com, finans@firma.com"
+        )
+        st.session_state.cc_raw = cc_raw
+        cc_list, invalid_cc = parse_email_list(cc_raw)
+        if invalid_cc:
+            st.warning(f"Geçersiz CC adresleri: {', '.join(invalid_cc)}")
+
+        start_time = datetime.now(IST_TZ)
         
         # Zamanlayıcı UI
         if enable_schedule:
             st.info("ℹ️ Zamanlayıcı çalışırken bu sekmeyi kapatmayın.")
             sc1, sc2 = st.columns(2)
-            sch_date = sc1.date_input("Tarih", datetime.now())
-            sch_time = sc2.time_input("Saat", (datetime.now() + timedelta(minutes=10)).time())
-            start_time = datetime.combine(sch_date, sch_time)
+            sch_date = sc1.date_input("Tarih", datetime.now(IST_TZ).date())
+            sch_time = sc2.time_input("Saat", (datetime.now(IST_TZ) + timedelta(minutes=10)).time())
+            start_time = datetime.combine(sch_date, sch_time).replace(tzinfo=IST_TZ)
             
-            if start_time < datetime.now():
+            if start_time < datetime.now(IST_TZ):
                 st.error("Lütfen ileri bir tarih seçin.")
 
         st.divider()
@@ -411,8 +466,8 @@ with tab_send:
             # Zamanlayıcı Bekleme
             if enable_schedule:
                 placeholder = st.empty()
-                while datetime.now() < start_time:
-                    diff = start_time - datetime.now()
+                while datetime.now(IST_TZ) < start_time:
+                    diff = start_time - datetime.now(IST_TZ)
                     placeholder.warning(f"⏳ Kalan Süre: {str(diff).split('.')[0]}")
                     time.sleep(1)
                 placeholder.empty()
@@ -451,7 +506,8 @@ with tab_send:
                 stat_code = "UNKNOWN"
                 
                 if is_dry_run:
-                    status_container.write(f"📝 [Test] {email}")
+                    cc_note = f" | CC: {', '.join(cc_list)}" if cc_list else ""
+                    status_container.write(f"📝 [Test] {email}{cc_note}")
                     stat_code = "SIMULATED"
                     time.sleep(0.05)
                 else:
@@ -464,6 +520,8 @@ with tab_send:
                         msg['From'] = acc['e']
                         msg['To'] = email
                         msg['Subject'] = subj
+                        if cc_list:
+                            msg['Cc'] = ", ".join(cc_list)
                         msg.attach(MIMEText(body, 'html'))
                         
                         if st.session_state.files:
@@ -474,21 +532,31 @@ with tab_send:
                                 part.add_header('Content-Disposition', f"attachment; filename={f.name}")
                                 msg.attach(part)
                                 
-                        acc['c'].sendmail(acc['e'], email, msg.as_string())
-                        status_container.write(f"✅ Gönderildi: {email} ({delay:.1f}s)")
+                        recipients = [email] + cc_list
+                        acc['c'].sendmail(acc['e'], recipients, msg.as_string())
+                        cc_note = f" + CC ({len(cc_list)})" if cc_list else ""
+                        status_container.write(f"✅ Gönderildi: {email}{cc_note} ({delay:.1f}s)")
                         stat_code = "SENT_OK"
                         success += 1
                     except Exception as e:
                         status_container.write(f"❌ Hata {email}: {e}")
                         stat_code = "ERROR"
 
-                logs.append({"date": str(datetime.now()), "email": email, "status": stat_code, "campaign": camp_name})
+                logs.append({
+                    "date": datetime.now(IST_TZ).isoformat(),
+                    "email": email,
+                    "status": stat_code,
+                    "campaign": camp_name,
+                    "cc": cc_list
+                })
                 bar.progress((i+1)/total)
 
             # Bitiş
             if not is_dry_run:
                 for c in conns: c['c'].quit()
                 existing = load_json(HISTORY_FILE)
+                if not isinstance(existing, list):
+                    existing = []
                 existing.extend(logs)
                 save_json(HISTORY_FILE, existing)
 

@@ -150,6 +150,92 @@ st.markdown("""
         color: #312e81;
         margin-bottom: 6px;
     }
+    .sidebar-header {
+        display: flex;
+        gap: 14px;
+        align-items: center;
+        padding: 18px;
+        margin-bottom: 16px;
+        border-radius: 16px;
+        border: 1px solid var(--border-light);
+        background: linear-gradient(135deg, rgba(15,23,42,0.05), rgba(59,130,246,0.12));
+    }
+    .sidebar-avatar {
+        width: 50px;
+        height: 50px;
+        border-radius: 14px;
+        background: #1d4ed8;
+        color: #fff;
+        font-weight: 700;
+        font-size: 1.2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: inset 0 0 0 2px rgba(255,255,255,0.3);
+    }
+    .sidebar-tag {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        background: rgba(59,130,246,0.15);
+        color: #1d4ed8;
+        font-weight: 600;
+    }
+    .sidebar-card {
+        border-radius: 16px;
+        border: 1px solid var(--border-light);
+        padding: 16px 18px;
+        background: var(--surface-light);
+        margin-bottom: 16px;
+        box-shadow: 0 12px 20px -16px rgba(15,23,42,0.4);
+    }
+    .sidebar-note {
+        margin: 0 0 8px;
+        font-size: 0.8rem;
+        color: var(--muted-light);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+    .sidebar-stat-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+    }
+    .sidebar-stat {
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: rgba(99,102,241,0.08);
+    }
+    .sidebar-stat span {
+        display: block;
+        font-size: 0.75rem;
+        color: var(--muted-light);
+    }
+    .sidebar-stat strong {
+        display: block;
+        margin-top: 4px;
+        font-size: 1.1rem;
+        color: var(--text-light);
+    }
+    .sidebar-chip {
+        display: inline-flex;
+        padding: 4px 10px;
+        margin: 2px 4px 2px 0;
+        border-radius: 999px;
+        background: rgba(16,185,129,0.12);
+        color: #047857;
+        font-size: 0.78rem;
+        font-weight: 600;
+    }
+    .sidebar-empty {
+        padding: 10px;
+        border-radius: 10px;
+        background: rgba(248,113,113,0.12);
+        color: #b91c1c;
+        font-size: 0.85rem;
+    }
     .login-box {
         max-width: 400px;
         margin: 100px auto;
@@ -234,6 +320,19 @@ st.markdown("""
     }
     body[data-theme="dark"] section[data-testid="stSidebar"] * {
         color: var(--text-dark) !important;
+    }
+    body[data-theme="dark"] .sidebar-header,
+    body[data-theme="dark"] .sidebar-card {
+        background-color: #0f172a;
+        border-color: #1f2937;
+        box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+    }
+    body[data-theme="dark"] .sidebar-stat {
+        background: rgba(59,130,246,0.15);
+    }
+    body[data-theme="dark"] .sidebar-chip {
+        background: rgba(16,185,129,0.25);
+        color: #34d399;
     }
     body[data-theme="dark"] .stButton > button {
         color: var(--text-dark);
@@ -455,6 +554,8 @@ if not st.session_state.current_user:
         # WorldPass ile giriş
         with tab_wp:
             st.caption("WorldPass hesabınla giriş yaparak SponsorBot'a eriş.")
+            st.info("WorldPass, Heptapus ekosistemindeki tüm servisler için tek seferlik kurumsal oturum açma (SSO) katmanıdır.")
+            st.link_button("WorldPass hesabı oluştur", "https://worldpass-beta.heptapusgroup.com/", type="secondary")
             with st.form("login_form_worldpass"):
                 wp_email = st.text_input("WorldPass Email")
                 wp_pass = st.text_input("WorldPass Şifre", type="password")
@@ -492,34 +593,98 @@ if not st.session_state.current_user:
 user = st.session_state.current_user
 role = user.get("role", "viewer")
 
+# GLOBAL CONTEXT & ÖZETLER
+global_ctx = {
+    "TODAY": datetime.now().strftime("%d.%m.%Y"),
+    "CLUB_NAME": st.session_state.club_name,
+    "CAMPAIGN_NAME": st.session_state.get("campaign_name", "Genel")
+}
+
+history_buffer = load_json(HISTORY_FILE)
+if not isinstance(history_buffer, list):
+    history_buffer = []
+
+sent_ok = sum(1 for item in history_buffer if item.get("status") == "SENT_OK")
+success_rate = int(sent_ok / len(history_buffer) * 100) if history_buffer else 0
+campaign_count = len({item.get("campaign", "-") for item in history_buffer if item.get("campaign")})
+recent_campaign = history_buffer[-1].get("campaign", "Hazır Değil") if history_buffer else "Hazır Değil"
+blacklist_snapshot = load_blacklist()
+blacklist_total = len(blacklist_snapshot)
+
 # --- SIDEBAR ---
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/2913/2913990.png", width=50)
-    st.title("Heptapus Panel")
-    st.markdown(f"👤 **{user['username']}** ({role.upper()})")
-    
+    username = user.get("username", "user")
+    primary_initials = "".join([chunk[0] for chunk in re.split(r"[^a-zA-Z0-9]+", username.split("@")[0]) if chunk])[:2].upper()
+    initials = primary_initials or username[:2].upper()
+    template_data_snapshot = load_json(TEMPLATE_FILE)
+    template_count = len(template_data_snapshot) if isinstance(template_data_snapshot, list) else 0
+    smtp_count = len(st.session_state.smtp_accounts)
+    history_total = len(history_buffer)
+
+    st.markdown(
+        f"""
+        <div class='sidebar-header'>
+            <div class='sidebar-avatar'>{initials}</div>
+            <div>
+                <p class='sidebar-note'>Aktif Kullanıcı</p>
+                <h3 style='margin:0;'>{username}</h3>
+                <span class='sidebar-tag'>{role.upper()}</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     if st.button("🚪 Çıkış Yap", use_container_width=True):
         st.session_state.current_user = None
         st.rerun()
-    
-    st.markdown("---")
-    
+
+    st.markdown(
+        f"""
+        <div class='sidebar-card'>
+            <p class='sidebar-note'>Panel Özeti</p>
+            <div class='sidebar-stat-grid'>
+                <div class='sidebar-stat'><span>SMTP</span><strong>{smtp_count}</strong></div>
+                <div class='sidebar-stat'><span>Şablon</span><strong>{template_count}</strong></div>
+                <div class='sidebar-stat'><span>Log</span><strong>{history_total}</strong></div>
+            </div>
+            <p style='margin-top:12px;font-size:0.85rem;'>Aktif kampanya: <strong>{global_ctx['CAMPAIGN_NAME']}</strong></p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     if has_permission(role, "send"):
-        with st.expander("📬 SMTP Ayarları", expanded=True):
-            st.caption("Aktif SMTP Havuzu")
-            if not st.session_state.smtp_accounts:
-                st.warning("Hesap eklenmedi!")
-            else:
-                for acc in st.session_state.smtp_accounts:
-                    st.success(f"✅ {acc['email']}")
-            
-            if st.button("➕ Hesap Ekle"):
-                st.session_state.show_smtp_form = True
+        st.markdown(
+            """
+            <div class='sidebar-card'>
+                <p class='sidebar-note'>SMTP Havuzu</p>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        if not st.session_state.smtp_accounts:
+            st.markdown("<div class='sidebar-empty'>Hesap eklenmedi</div>", unsafe_allow_html=True)
+        else:
+            chips = "".join([f"<span class='sidebar-chip'>{acc['email']}</span>" for acc in st.session_state.smtp_accounts])
+            st.markdown(chips, unsafe_allow_html=True)
+
+        if st.button("➕ Hesap Ekle", use_container_width=True):
+            st.session_state.show_smtp_form = True
+
+        st.markdown("</div>", unsafe_allow_html=True)
 
     if has_permission(role, "manage_users"):
-        with st.expander("⚙️ Admin Paneli"):
-            st.write(f"Toplam Kullanıcı: {len(config_data.get('users', []))}")
-            st.caption("→ İstersen buraya kullanıcı ekleme/silme ekranı da ekleyebilirsin.")
+        st.markdown(
+            f"""
+            <div class='sidebar-card'>
+                <p class='sidebar-note'>Yönetim</p>
+                <p style='margin:0;'>Toplam kullanıcı: <strong>{len(config_data.get('users', []))}</strong></p>
+                <p style='margin:4px 0 0;font-size:0.85rem;'>Yeni admin eklemek için `config_settings.json` dosyasını güncelleyebilirsin.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     st.caption("Heptapus SponsorBot © 2024")
 
@@ -547,25 +712,6 @@ if st.session_state.get("show_smtp_form"):
                 st.session_state.show_smtp_form = False
                 st.success("SMTP hesabı eklendi.")
                 st.rerun()
-
-# GLOBAL CONTEXT
-global_ctx = {
-    "TODAY": datetime.now().strftime("%d.%m.%Y"),
-    "CLUB_NAME": st.session_state.club_name,
-    "CAMPAIGN_NAME": st.session_state.get("campaign_name", "Genel")
-}
-
-# Gösterge Paneli
-history_buffer = load_json(HISTORY_FILE)
-if not isinstance(history_buffer, list):
-    history_buffer = []
-
-sent_ok = sum(1 for item in history_buffer if item.get("status") == "SENT_OK")
-success_rate = int(sent_ok / len(history_buffer) * 100) if history_buffer else 0
-campaign_count = len({item.get("campaign", "-") for item in history_buffer if item.get("campaign")})
-recent_campaign = history_buffer[-1].get("campaign", "Hazır Değil") if history_buffer else "Hazır Değil"
-blacklist_snapshot = load_blacklist()
-blacklist_total = len(blacklist_snapshot)
 
 st.markdown(
     f"""
@@ -656,7 +802,7 @@ with t_data:
                 {"Yetkili": "Ayşe Demir", "Email": "ayse@demo.com", "Sirket": "Soft Ltd."}
             ])
             output = io.BytesIO()
-            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+            with pd.ExcelWriter(output, engine="openpyxl") as writer:
                 dummy_data.to_excel(writer, index=False)
             st.download_button(
                 "📥 Şablonu Al",

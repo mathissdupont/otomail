@@ -76,6 +76,80 @@ st.markdown("""
         margin-bottom: 20px;
         color: var(--text-light);
     }
+    .hero {
+        background: linear-gradient(135deg, #1d4ed8 0%, #9333ea 100%);
+        color: white;
+        padding: 32px;
+        border-radius: 18px;
+        margin-bottom: 30px;
+        box-shadow: 0 25px 50px -12px rgba(79, 70, 229, 0.45);
+        border: 1px solid rgba(255,255,255,0.15);
+    }
+    .hero h1 {
+        color: white;
+        margin-bottom: 0.3rem;
+        font-size: 2rem;
+    }
+    .hero p {
+        color: rgba(255,255,255,0.8);
+        margin: 0.2rem 0;
+    }
+    .stat-pill {
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+        background: rgba(255,255,255,0.15);
+        border-radius: 999px;
+        padding: 6px 14px;
+        font-size: 0.85rem;
+        margin-right: 8px;
+    }
+    .kpi-card {
+        border-radius: 16px;
+        padding: 18px;
+        border: 1px solid var(--border-light);
+        background: var(--surface-light);
+        box-shadow: 0 20px 35px -18px rgba(15, 23, 42, 0.35);
+    }
+    .kpi-card h4 {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--muted-light);
+    }
+    .kpi-card p {
+        margin: 6px 0 0;
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-light);
+    }
+    .tag {
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        font-size: 0.75rem;
+        background: #e0e7ff;
+        color: #312e81;
+        margin-right: 6px;
+    }
+    .stepper {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+    .stepper .step {
+        flex: 1 1 200px;
+        border-radius: 12px;
+        border: 1px dashed #c7d2fe;
+        padding: 14px 18px;
+        background: rgba(99,102,241,0.08);
+    }
+    .step .step-title {
+        font-weight: 600;
+        color: #312e81;
+        margin-bottom: 6px;
+    }
     .login-box {
         max-width: 400px;
         margin: 100px auto;
@@ -481,6 +555,74 @@ global_ctx = {
     "CAMPAIGN_NAME": st.session_state.get("campaign_name", "Genel")
 }
 
+# Gösterge Paneli
+history_buffer = load_json(HISTORY_FILE)
+if not isinstance(history_buffer, list):
+    history_buffer = []
+
+sent_ok = sum(1 for item in history_buffer if item.get("status") == "SENT_OK")
+success_rate = int(sent_ok / len(history_buffer) * 100) if history_buffer else 0
+campaign_count = len({item.get("campaign", "-") for item in history_buffer if item.get("campaign")})
+recent_campaign = history_buffer[-1].get("campaign", "Hazır Değil") if history_buffer else "Hazır Değil"
+blacklist_snapshot = load_blacklist()
+blacklist_total = len(blacklist_snapshot)
+
+st.markdown(
+    f"""
+    <div class='hero'>
+        <div style='display:flex; flex-wrap:wrap; gap:1.5rem; justify-content:space-between; align-items:flex-start;'>
+            <div>
+                <div class='stat-pill'>Aktif Kullanıcı · {user['username']}</div>
+                <div class='stat-pill'>Rol · {role.upper()}</div>
+                <h1>Heptapus SponsorBot Kontrol Merkezi</h1>
+                <p>Kampanyalarını tek panelden kurgula, test et ve performansını takip et.</p>
+            </div>
+            <div style='text-align:right;'>
+                <p>Güncel Kampanya</p>
+                <h2 style='margin:0;color:#fff;'>{global_ctx['CAMPAIGN_NAME']}</h2>
+                <p style='opacity:0.8;'>Son Aktivite: {recent_campaign}</p>
+            </div>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+kpi_cols = st.columns(4)
+kpi_data = [
+    ("Toplam Log", len(history_buffer)),
+    ("Başarı Oranı", f"%{success_rate}"),
+    ("Kampanya Çeşidi", campaign_count or "-"),
+    ("Blacklist", blacklist_total),
+]
+for idx, col in enumerate(kpi_cols):
+    title, value = kpi_data[idx]
+    col.markdown(f"<div class='kpi-card'><h4>{title}</h4><p>{value}</p></div>", unsafe_allow_html=True)
+
+st.markdown(
+    """
+    <div class='stepper'>
+        <div class='step'>
+            <div class='step-title'>1 · Veri Kaynağı</div>
+            Excel'i yükle, alanları doğrula ve temizle
+        </div>
+        <div class='step'>
+            <div class='step-title'>2 · Şablon & İçerik</div>
+            Dinamik placeholder'lar ve ekleri hazırlayıp test et
+        </div>
+        <div class='step'>
+            <div class='step-title'>3 · Kampanya</div>
+            A/B denemeleri, dry-run ve gerçek gönderime geç
+        </div>
+        <div class='step'>
+            <div class='step-title'>4 · Analitik</div>
+            Performans, log ve blacklist'i tek ekrandan izle
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
 # Sekmeler
 t_data, t_tmpl, t_send, t_stat = st.tabs(
     ["📂 Veri Yükle", "📝 Şablon Editörü", "🚀 Gönderim Paneli", "📊 Analitik"]
@@ -492,15 +634,23 @@ email_col = None
 
 # 1. VERİ
 with t_data:
-    st.markdown("### 📤 Hedef Kitle Listesi")
-    st.markdown("Excel dosyanızda **Yetkili, Email, Sirket** gibi sütunların olduğundan emin olun.")
-    
-    col_file, col_info = st.columns([1, 2])
-    
-    with col_file:
-        uploaded_file = st.file_uploader("Excel Dosyası (.xlsx)", type=["xlsx"])
-        
-        if st.button("📄 Örnek Excel İndir"):
+    st.markdown("### 📤 Hedef Kitle Operasyonları")
+    st.markdown(
+        """
+        <div class='stCard'>
+            <strong>İpucu:</strong> Yetkili adı, şirket, telefon, sektör gibi alanları da taşırsan dinamik placeholder'larla daha kişisel mailler gönderebilirsin.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    data_left, data_right = st.columns([1.2, 1])
+
+    with data_left:
+        st.markdown("<div class='stCard'>", unsafe_allow_html=True)
+        uploaded_file = st.file_uploader("Excel Dosyası (.xlsx)", type=["xlsx"], help="Tek seferde maksimum 10.000 kayıt önerilir")
+        helper_cols = st.columns([1, 1])
+        with helper_cols[0]:
             dummy_data = pd.DataFrame([
                 {"Yetkili": "Ahmet Yılmaz", "Email": "ahmet@ornek.com", "Sirket": "Tech A.Ş."},
                 {"Yetkili": "Ayşe Demir", "Email": "ayse@demo.com", "Sirket": "Soft Ltd."}
@@ -509,30 +659,43 @@ with t_data:
             with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
                 dummy_data.to_excel(writer, index=False)
             st.download_button(
-                "📥 İndir",
+                "📥 Şablonu Al",
                 output.getvalue(),
                 "ornek_liste.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
+        with helper_cols[1]:
+            st.caption("Sürükle-bırak desteklenir. Veri yükledikten sonra ilk 5 kayıt aşağıda görünür.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with data_right:
+        st.markdown("<div class='stCard'>", unsafe_allow_html=True)
+        st.markdown("#### Veri Sağlığı")
+        st.caption("E-posta sütununu seçtikten sonra otomatik doğrulama yapılır.")
+        st.markdown("</div>", unsafe_allow_html=True)
 
     if uploaded_file:
         try:
             df = pd.read_excel(uploaded_file).fillna("").astype(str)
-            with col_info:
+
+            with data_right:
                 st.markdown("<div class='stCard'>", unsafe_allow_html=True)
-                email_col = st.selectbox("📧 E-Posta Sütununu Seçin", df.columns, index=0)
-                
+                email_col = st.selectbox("📧 E-Posta Sütunu", df.columns, index=0)
+
                 valid_mask = df[email_col].apply(is_valid_email)
                 valid_count = valid_mask.sum()
                 invalid_count = len(df) - valid_count
-                
+
                 m1, m2, m3 = st.columns(3)
                 m1.metric("Toplam Kayıt", len(df))
                 m2.metric("Geçerli Email", valid_count)
                 m3.metric("Hatalı/Boş", invalid_count, delta_color="inverse")
-                
+
+                st.caption("İlk 5 kayıt")
+                st.dataframe(df.head(), use_container_width=True)
+
                 if invalid_count > 0:
-                    with st.expander("⚠️ Hatalı Kayıtları Gör"):
+                    with st.expander("⚠️ Hatalı Kayıtları İncele"):
                         st.dataframe(df[~valid_mask])
                 st.markdown("</div>", unsafe_allow_html=True)
         except Exception as e:
@@ -540,46 +703,64 @@ with t_data:
 
 # 2. ŞABLON
 with t_tmpl:
-    col_editor, col_preview = st.columns([2, 1])
-    
+    st.markdown("### 🧱 Mesaj Tasarım Stüdyosu")
+    st.caption("Metin, görsel ve değişkenleri aynı ekranda düzenleyip test et.")
+
+    col_editor, col_preview = st.columns([1.5, 1])
+
     with col_editor:
-        st.markdown("### ✍️ İçerik Editörü")
-        st.session_state.mail_subject = st.text_input("Konu Başlığı", st.session_state.mail_subject)
-        
-        st.markdown("""
-        <div style="margin-bottom:5px; font-size:0.8em; color:#666;">
-        Desteklenen Değişkenler: <code>{Yetkili}</code>, <code>{Sirket}</code>, <code>{CLUB_NAME}</code>, <code>{TODAY}</code>, <code>{CAMPAIGN_NAME}</code>
-        </div>
-        """, unsafe_allow_html=True)
-        
+        st.markdown("<div class='stCard'>", unsafe_allow_html=True)
+        st.subheader("Konu & Gövde")
+
+        st.session_state.mail_subject = st.text_input(
+            "Konu Başlığı",
+            st.session_state.mail_subject,
+            help="Kampanya adı yerine kişiselleştirme kullanmak için {CAMPAIGN_NAME} ekleyebilirsin."
+        )
+
+        placeholders = ["{Yetkili}", "{Sirket}", "{CLUB_NAME}", "{TODAY}", "{CAMPAIGN_NAME}"]
+        tags_html = "".join([f"<span class='tag'>{tag}</span>" for tag in placeholders])
+        st.markdown(f"<div style='margin:4px 0 8px;'>{tags_html}</div>", unsafe_allow_html=True)
+
         st.session_state.mail_body = st.text_area(
             "HTML Mesaj İçeriği",
             st.session_state.mail_body,
-            height=400,
-            help="Buraya HTML formatında mail içeriği yazabilirsiniz."
+            height=360,
+            help="Satır içi CSS desteklenir. Görsel linklerini absolute URL olarak ekleyin."
         )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("<div class='stCard'>", unsafe_allow_html=True)
+        st.subheader("Ekler & Notlar")
+        st.caption("PDF teklifleri, sunumlar veya görselleri toplu ekleyebilirsin.")
         st.session_state.files = st.file_uploader(
-            "📎 Dosya Ekle (PDF/Görsel)",
-            accept_multiple_files=True
+            "📎 Dosya Ekle",
+            accept_multiple_files=True,
+            help="Dosya isimleri Gönderim Panelinde özet olarak listelenir."
         )
+        st.markdown("</div>", unsafe_allow_html=True)
 
     with col_preview:
-        st.markdown("### 👁️ Önizleme")
+        st.markdown("<div class='stCard'>", unsafe_allow_html=True)
+        st.subheader("Canlı Önizleme")
         if df is not None and not df.empty:
-            prev_idx = st.number_input("Satır No", 0, len(df)-1, 0)
+            prev_idx = st.number_input("Örnek Satır", 0, len(df)-1, 0)
             row = df.iloc[int(prev_idx)].to_dict()
             p_subj = render_template(st.session_state.mail_subject, row, global_ctx)
             p_body = render_template(st.session_state.mail_body, row, global_ctx)
             st.info(f"Konu: {p_subj}")
-            st.components.v1.html(p_body, height=400, scrolling=True)
+            st.components.v1.html(p_body, height=360, scrolling=True)
         else:
             st.warning("Önizleme için önce veri yükleyin.")
-        
-        st.markdown("---")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("<div class='stCard'>", unsafe_allow_html=True)
+        st.subheader("Şablon Kütüphanesi")
         templates = load_json(TEMPLATE_FILE)
         if isinstance(templates, list) and templates:
-            selected_t = st.selectbox("Hazır Şablon Yükle", [t.get("name", "İsimsiz") for t in templates])
-            if st.button("Şablonu Uygula"):
+            selected_t = st.selectbox("Hazır Şablon", [t.get("name", "İsimsiz") for t in templates])
+            st.caption("Şablonlar kategorilere ayrıldıysa isimde görebilirsin.")
+            if st.button("Şablonu Yükle"):
                 t_data_load = next((t for t in templates if t.get("name") == selected_t), None)
                 if t_data_load:
                     st.session_state.mail_subject = t_data_load.get("subject", st.session_state.mail_subject)
@@ -587,11 +768,13 @@ with t_tmpl:
                     st.success("Şablon yüklendi.")
                     st.rerun()
         else:
-            st.caption("Kayıtlı şablon bulunamadı (TEMPLATE_FILE).")
+            st.caption("Kayıtlı şablon bulunamadı (mail_sablonlari.json).")
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # 3. GÖNDERİM
 with t_send:
-    st.markdown("### 🚀 Kampanya Başlatıcı")
+    st.markdown("### 🚀 Kampanya Kontrol Odası")
+    st.caption("Gönderim öncesi checklist'i tamamla, dry-run yap ve ardından gerçek gönderime geç.")
 
     if not has_permission(role, "send"):
         st.error("Bu sekmeye erişim yetkin yok.")
@@ -603,42 +786,56 @@ with t_send:
         st.error("Lütfen Sidebar üzerinden en az bir SMTP hesabı ekleyin.")
     else:
         st.markdown("<div class='stCard'>", unsafe_allow_html=True)
+        c_summary = st.columns(3)
+        c_summary[0].metric("Hedef Kayıt", len(df))
+        c_summary[1].metric("SMTP Havuzu", len(st.session_state.smtp_accounts))
+        c_summary[2].metric("Eklenen Dosya", len(st.session_state.get("files", [])))
+
         c1, c2 = st.columns(2)
         st.session_state.campaign_name = c1.text_input(
             "Kampanya Adı",
             st.session_state.get("campaign_name", "Sponsorluk Q1")
         )
-        is_dry_run = c2.toggle("Dry Run (Simülasyon)", value=True)
+        is_dry_run = c2.toggle("Dry Run (Önizleme)", value=True, help="Aktifken gönderimler SMTP'ye gitmez, loglar simüle edilir")
 
-        enable_ab = st.toggle("A/B Testi Aktif")
-        if enable_ab:
-            sa, sb = st.columns(2)
-            st.session_state.subject_a = sa.text_input(
-                "Varyasyon A (Konu)",
-                st.session_state.subject_a or st.session_state.mail_subject
-            )
-            st.session_state.subject_b = sb.text_input(
-                "Varyasyon B (Konu)",
-                st.session_state.subject_b or (st.session_state.mail_subject + " (Özel)")
-            )
+        with st.expander("🎛️ Gelişmiş Ayarlar", expanded=False):
+            enable_ab = st.checkbox("A/B Testi Aç")
+            if enable_ab:
+                sa, sb = st.columns(2)
+                st.session_state.subject_a = sa.text_input(
+                    "Varyasyon A (Konu)",
+                    st.session_state.subject_a or st.session_state.mail_subject
+                )
+                st.session_state.subject_b = sb.text_input(
+                    "Varyasyon B (Konu)",
+                    st.session_state.subject_b or (st.session_state.mail_subject + " (Özel)")
+                )
+            st.caption("A/B aktif olduğunda kayıtlar sırayla A ve B olarak gider.")
 
-        st.markdown("---")
-        test_mail_addr = st.text_input("Test E-Postası Alıcısı", placeholder="kendi.mailiniz@ornek.com")
-        if st.button("🧪 Test Gönder"):
-            if not test_mail_addr:
-                st.warning("Test için mail adresi girin.")
-            else:
-                try:
-                    acc = st.session_state.smtp_accounts[0]
-                    conn = open_smtp(acc)
-                    test_row = df.iloc[0].to_dict()
-                    subj = render_template(st.session_state.mail_subject, test_row, global_ctx)
-                    bod = render_template(st.session_state.mail_body, test_row, global_ctx)
-                    send_mail_single(conn, acc["email"], test_mail_addr, f"[TEST] {subj}", bod, st.session_state.files)
-                    conn.quit()
-                    st.success("Test maili gönderildi!")
-                except Exception as e:
-                    st.error(f"Hata: {e}")
+        qa_col, test_col = st.columns([2, 1])
+        with qa_col:
+            st.markdown("#### Kalite Kontrol")
+            st.write("- Placeholder'lar önizlemede doğrulandı mı?" )
+            st.write(f"- Blacklist'te {blacklist_total} mail var, listeyi güncelledin mi?")
+            st.write("- SMTP havuzunda kota sınırlarını kontrol ettin mi?")
+        with test_col:
+            st.markdown("#### Test Gönder")
+            test_mail_addr = st.text_input("Test Adresi", placeholder="kendi.mailiniz@ornek.com")
+            if st.button("🧪 Test Gönder"):
+                if not test_mail_addr:
+                    st.warning("Test için mail adresi girin.")
+                else:
+                    try:
+                        acc = st.session_state.smtp_accounts[0]
+                        conn = open_smtp(acc)
+                        test_row = df.iloc[0].to_dict()
+                        subj = render_template(st.session_state.mail_subject, test_row, global_ctx)
+                        bod = render_template(st.session_state.mail_body, test_row, global_ctx)
+                        send_mail_single(conn, acc["email"], test_mail_addr, f"[TEST] {subj}", bod, st.session_state.files)
+                        conn.quit()
+                        st.success("Test maili gönderildi!")
+                    except Exception as e:
+                        st.error(f"Hata: {e}")
         st.markdown("</div>", unsafe_allow_html=True)
 
         if st.button("🚀 GÖNDERİMİ BAŞLAT", type="primary", use_container_width=True):
@@ -747,8 +944,8 @@ with t_send:
 
 # 4. ANALİTİK
 with t_stat:
-    st.markdown("### 📊 Performans Raporu")
-    hist_data = load_json(HISTORY_FILE)
+    st.markdown("### 📊 Analitik & Takip")
+    hist_data = history_buffer
 
     if isinstance(hist_data, list) and hist_data:
         df_hist = pd.DataFrame(hist_data)
@@ -756,22 +953,40 @@ with t_stat:
             df_hist["date"] = pd.to_datetime(df_hist["date"], errors="coerce")
             df_hist = df_hist.dropna(subset=["date"])
 
-        total_sent = len(df_hist)
-        success_sent = len(df_hist[df_hist["status"] == "SENT_OK"])
+        campaigns = ["Tümü"] + sorted(df_hist.get("campaign", pd.Series([])).dropna().unique().tolist())
+        statuses = ["Tümü"] + sorted(df_hist.get("status", pd.Series([])).dropna().unique().tolist())
+        variants = ["Tümü"] + sorted(df_hist.get("variant", pd.Series([])).dropna().unique().tolist())
 
+        f1, f2, f3 = st.columns(3)
+        selected_campaign = f1.selectbox("Kampanya Filtresi", campaigns)
+        selected_status = f2.selectbox("Durum Filtresi", statuses)
+        selected_variant = f3.selectbox("Varyasyon", variants)
+
+        filtered_df = df_hist.copy()
+        if selected_campaign != "Tümü":
+            filtered_df = filtered_df[filtered_df["campaign"] == selected_campaign]
+        if selected_status != "Tümü":
+            filtered_df = filtered_df[filtered_df["status"] == selected_status]
+        if selected_variant != "Tümü":
+            filtered_df = filtered_df[filtered_df["variant"] == selected_variant]
+
+        st.markdown("<div class='stCard'>", unsafe_allow_html=True)
+        total_sent = len(filtered_df)
+        success_sent = len(filtered_df[filtered_df["status"] == "SENT_OK"])
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Toplam İşlem", total_sent)
-        k2.metric("Başarılı Gönderim", success_sent)
-        k3.metric("Başarı Oranı", f"%{int(success_sent/total_sent*100) if total_sent else 0}")
-        k4.metric("Aktif Kampanyalar", df_hist.get("campaign", pd.Series([])).nunique())
+        k1.metric("Log Kaydı", total_sent)
+        k2.metric("Başarılı", success_sent)
+        k3.metric("Başarı", f"%{int(success_sent/total_sent*100) if total_sent else 0}")
+        k4.metric("Kampanya", filtered_df.get("campaign", pd.Series([])).nunique())
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        col_chart1, col_chart2 = st.columns(2)
-
-        with col_chart1:
-            st.markdown("#### Günlük Gönderim")
-            if "date" in df_hist.columns:
+        chart_cols = st.columns(2)
+        with chart_cols[0]:
+            st.markdown("<div class='stCard'>", unsafe_allow_html=True)
+            st.subheader("Günlük Gönderim")
+            if "date" in filtered_df.columns and not filtered_df.empty:
                 chart = (
-                    alt.Chart(df_hist)
+                    alt.Chart(filtered_df)
                     .mark_bar()
                     .encode(
                         x="date:T",
@@ -779,45 +994,56 @@ with t_stat:
                         color="status:N",
                         tooltip=["date:T", "status:N", "count()"]
                     )
-                    .properties(height=300)
+                    .properties(height=280)
                 )
                 st.altair_chart(chart, use_container_width=True)
             else:
                 st.info("Tarih bilgisi bulunamadı.")
+            st.markdown("</div>", unsafe_allow_html=True)
 
-        with col_chart2:
-            st.markdown("#### A/B Testi Sonuçları")
-            if "variant" in df_hist.columns:
+        with chart_cols[1]:
+            st.markdown("<div class='stCard'>", unsafe_allow_html=True)
+            st.subheader("Varyasyon Dağılımı")
+            if "variant" in filtered_df.columns and not filtered_df.empty:
                 chart_ab = (
-                    alt.Chart(df_hist)
+                    alt.Chart(filtered_df)
                     .mark_arc(innerRadius=50)
                     .encode(
                         theta="count()",
                         color="variant:N",
                         tooltip=["variant:N", "count()"]
                     )
-                    .properties(height=300)
+                    .properties(height=280)
                 )
                 st.altair_chart(chart_ab, use_container_width=True)
             else:
                 st.info("A/B verisi bulunamadı.")
+            st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown("#### Detaylı Loglar")
-        st.dataframe(df_hist.sort_values("date", ascending=False), use_container_width=True)
+        st.markdown("<div class='stCard'>", unsafe_allow_html=True)
+        st.subheader("Detaylı Loglar")
+        log_df = filtered_df.sort_values("date", ascending=False) if "date" in filtered_df.columns else filtered_df
+        st.dataframe(log_df, use_container_width=True)
+        st.download_button(
+            "📥 CSV olarak indir",
+            filtered_df.to_csv(index=False).encode("utf-8"),
+            file_name="kampanya_loglari.csv",
+            mime="text/csv"
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown("---")
-        st.markdown("### 🚫 Blacklist Yönetimi")
-        bl = load_blacklist()
-        col_bl1, col_bl2 = st.columns(2)
+        st.markdown("<div class='stCard'>", unsafe_allow_html=True)
+        st.subheader("🚫 Blacklist Yönetimi")
+        bl = blacklist_snapshot
+        col_bl1, col_bl2 = st.columns([2, 1])
         with col_bl1:
-            st.write("Blackliste alınmış adresler:")
             if bl:
                 st.write(sorted(list(bl)))
             else:
                 st.caption("Şu an blacklist boş.")
         with col_bl2:
-            new_bl = st.text_input("Blacklist'e eklenecek email")
-            if st.button("Ekle"):
+            new_bl = st.text_input("Yeni Email Ekle")
+            if st.button("Blackliste Kaydet"):
                 if not is_valid_email(new_bl):
                     st.error("Geçerli bir email gir.")
                 else:
@@ -825,5 +1051,6 @@ with t_stat:
                     save_blacklist(bl)
                     st.success("Blacklist güncellendi.")
                     st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
     else:
         st.info("Henüz gönderim geçmişi bulunmamaktadır.")

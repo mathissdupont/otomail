@@ -98,11 +98,14 @@ st.markdown("""
         display: inline-flex;
         gap: 6px;
         align-items: center;
-        background: rgba(255,255,255,0.15);
+        background: rgba(255,255,255,0.92);
+        border: 1px solid rgba(15,23,42,0.08);
         border-radius: 999px;
         padding: 6px 14px;
         font-size: 0.85rem;
         margin-right: 8px;
+        color: #0f172a;
+        font-weight: 600;
     }
     .kpi-card {
         border-radius: 16px;
@@ -150,6 +153,11 @@ st.markdown("""
         color: #312e81;
         margin-bottom: 6px;
     }
+    .sidebar-shell {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+    }
     .sidebar-header {
         display: flex;
         gap: 14px;
@@ -188,8 +196,13 @@ st.markdown("""
         border: 1px solid var(--border-light);
         padding: 16px 18px;
         background: var(--surface-light);
-        margin-bottom: 16px;
+        margin-bottom: 0;
         box-shadow: 0 12px 20px -16px rgba(15,23,42,0.4);
+    }
+    .sidebar-card p,
+    .sidebar-card span,
+    .sidebar-card strong {
+        color: var(--text-light);
     }
     .sidebar-note {
         margin: 0 0 8px;
@@ -232,9 +245,16 @@ st.markdown("""
     .sidebar-empty {
         padding: 10px;
         border-radius: 10px;
-        background: rgba(248,113,113,0.12);
-        color: #b91c1c;
+        background: rgba(248,113,113,0.16);
+        color: #991b1b;
         font-size: 0.85rem;
+    }
+    .sidebar-footer {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted-light);
+        text-align: center;
     }
     .login-box {
         max-width: 400px;
@@ -247,12 +267,17 @@ st.markdown("""
         border: 1px solid var(--border-light);
         color: var(--text-light);
     }
-    .stButton > button {
+    .stButton > button,
+    .stLinkButton > button {
         border-radius: 8px;
         font-weight: 600;
         transition: all 0.2s ease;
+        background: #1d4ed8;
+        color: #fff;
+        border: 1px solid rgba(15,23,42,0.1);
     }
-    .stButton > button:hover {
+    .stButton > button:hover,
+    .stLinkButton > button:hover {
         transform: translateY(-1px);
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
@@ -334,13 +359,20 @@ st.markdown("""
         background: rgba(16,185,129,0.25);
         color: #34d399;
     }
-    body[data-theme="dark"] .stButton > button {
+    body[data-theme="dark"] .stButton > button,
+    body[data-theme="dark"] .stLinkButton > button {
         color: var(--text-dark);
         border: 1px solid rgba(148, 163, 184, 0.4);
         background-color: #1d4ed8;
     }
-    body[data-theme="dark"] .stButton > button:hover {
+    body[data-theme="dark"] .stButton > button:hover,
+    body[data-theme="dark"] .stLinkButton > button:hover {
         box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35);
+    }
+    body[data-theme="dark"] .stat-pill {
+        background: rgba(15,23,42,0.4);
+        border-color: rgba(148,163,184,0.4);
+        color: var(--text-dark);
     }
     body[data-theme="dark"] .stSelectbox > div,
     body[data-theme="dark"] .stTextInput > div > div,
@@ -355,6 +387,13 @@ st.markdown("""
         color: var(--text-dark) !important;
     }
     body[data-theme="dark"] .stMarkdown, body[data-theme="dark"] .stCaption {
+        color: var(--text-dark);
+    }
+    body[data-theme="dark"] .sidebar-note,
+    body[data-theme="dark"] .sidebar-card p,
+    body[data-theme="dark"] .sidebar-card span,
+    body[data-theme="dark"] .sidebar-card strong,
+    body[data-theme="dark"] .sidebar-footer {
         color: var(--text-dark);
     }
 </style>
@@ -621,6 +660,8 @@ with st.sidebar:
     smtp_count = len(st.session_state.smtp_accounts)
     history_total = len(history_buffer)
 
+    st.markdown("<div class='sidebar-shell'>", unsafe_allow_html=True)
+
     st.markdown(
         f"""
         <div class='sidebar-header'>
@@ -680,8 +721,8 @@ with st.sidebar:
             <div class='sidebar-card'>
                 <p class='sidebar-note'>Yönetim</p>
                 <p style='margin:0;'>Toplam kullanıcı: <strong>{len(config_data.get('users', []))}</strong></p>
-                <p style='margin:4px 0 0;font-size:0.85rem;'>Yeni admin eklemek için `config_settings.json` dosyasını güncelleyebilirsin.</p>
-            </div>
+    st.markdown("<div class='sidebar-footer'>Heptapus SponsorBot © 2024</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
             """,
             unsafe_allow_html=True,
         )

@@ -238,6 +238,19 @@ def render_template(text, row_data, global_ctx):
     for k, v in global_ctx.items(): res = res.replace(f"{{{k}}}", str(v))
     return res
 
+def read_uploaded_excel(uploaded_file):
+    """Sağlam excel okuma; openpyxl eksikse kullanıcıya yol göster."""
+    try:
+        return pd.read_excel(uploaded_file).fillna("").astype(str)
+    except ImportError:
+        st.error(
+            "Excel okumak için `openpyxl` kurulmalı. `pip install -r requirements.txt` komutuyla kurulum yapıp tekrar deneyin."
+        )
+        st.stop()
+    except Exception as exc:
+        st.error(f"Excel dosyası okunamadı: {exc}")
+        return None
+
 def open_smtp(acc):
     s = smtplib.SMTP(acc['server'], acc['port'])
     s.starttls()
@@ -308,17 +321,18 @@ with tab_data:
         uploaded_file = st.file_uploader("Excel Dosyası", type=["xlsx"])
     df = None; email_col = None
     if uploaded_file:
-        df = pd.read_excel(uploaded_file).fillna("").astype(str)
-        with col_up:
-            email_col = st.selectbox("E-Posta Sütunu", df.columns)
-            st.success(f"Kayıt: {len(df)}")
-        with col_audit:
-            # Hata Düzeltmesi: bool() eklendiği için artık hata vermez
-            invalid_mails = df[~df[email_col].apply(is_valid_email)]
-            m1, m2 = st.columns(2)
-            m1.metric("Geçerli", len(df)-len(invalid_mails))
-            m2.metric("Hatalı", len(invalid_mails), delta_color="inverse")
-            if len(invalid_mails) > 0: st.dataframe(invalid_mails[[email_col]])
+        df = read_uploaded_excel(uploaded_file)
+        if df is not None:
+            with col_up:
+                email_col = st.selectbox("E-Posta Sütunu", df.columns)
+                st.success(f"Kayıt: {len(df)}")
+            with col_audit:
+                # Hata Düzeltmesi: bool() eklendiği için artık hata vermez
+                invalid_mails = df[~df[email_col].apply(is_valid_email)]
+                m1, m2 = st.columns(2)
+                m1.metric("Geçerli", len(df)-len(invalid_mails))
+                m2.metric("Hatalı", len(invalid_mails), delta_color="inverse")
+                if len(invalid_mails) > 0: st.dataframe(invalid_mails[[email_col]])
 
 # --- TAB 2: ŞABLON ---
 with tab_content:

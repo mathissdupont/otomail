@@ -5,5 +5,12 @@
 		"delay_min": 5,
 		"delay_max": 15
 	},
-	"users": []
+	"users": [
+    {
+      "username": "mathissdupont",
+      "password_hash": "4d1d1c2e095614c9d39b79ff5d5f46e66022319484f2002938188bca60f0c11a",
+      "role": "admin"
+    }
+
+    ]
 }

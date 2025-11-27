@@ -15,6 +15,7 @@ import altair as alt
 import hashlib
 import hmac
 import io
+import requests
 
 # ================== AYARLAR & KONFİGÜRASYON ==================
 st.set_page_config(
@@ -30,6 +31,10 @@ CONFIG_FILE = "config_settings.json"
 TEMPLATE_FILE = "mail_sablonlari.json"
 BLACKLIST_FILE = "blacklist.json"
 
+# WorldPass Ayarları
+WORLDPASS_LOGIN_URL = "https://worldpass-beta.heptapusgroup.com/api/user/login"  # gerekirse değiştir
+ADMIN_EMAILS = ["sametutku64@gmail.com"]  # WorldPass üzerinden admin sayılacak adresler
+
 # Yetki Matrisi
 ROLE_PERMISSIONS = {
     "admin": {"send": True, "edit_templates": True, "view_analytics": True, "manage_users": True},
@@ -40,42 +45,48 @@ ROLE_PERMISSIONS = {
 # ================== MODERN CSS & TEMA ==================
 st.markdown("""
 <style>
-    /* Genel Font ve Arka Plan */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-    
+
+    :root {
+        --surface-light: #ffffff;
+        --surface-dark: #111827;
+        --border-light: #e5e7eb;
+        --border-dark: #1f2937;
+        --text-light: #0f172a;
+        --text-dark: #f1f5f9;
+        --muted-light: #64748b;
+        --muted-dark: #94a3b8;
+        --sidebar-light: #f8fafc;
+        --sidebar-dark: #0f172a;
+    }
+
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
     }
-    
-    /* Ana Konteyner */
     .block-container {
         padding-top: 2rem;
         padding-bottom: 2rem;
     }
-
-    /* Kart Tasarımı */
     .stCard {
-        background-color: #ffffff;
+        background-color: var(--surface-light);
         padding: 24px;
         border-radius: 12px;
-        border: 1px solid #e5e7eb;
+        border: 1px solid var(--border-light);
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
         margin-bottom: 20px;
+        color: var(--text-light);
     }
-
-    /* Login Kutusu */
     .login-box {
         max-width: 400px;
         margin: 100px auto;
         padding: 40px;
-        background: white;
+        background: var(--surface-light);
         border-radius: 16px;
         box-shadow: 0 10px 25px rgba(0,0,0,0.1);
         text-align: center;
-        border: 1px solid #eee;
+        border: 1px solid var(--border-light);
+        color: var(--text-light);
     }
-
-    /* Butonlar */
     .stButton > button {
         border-radius: 8px;
         font-weight: 600;
@@ -83,10 +94,8 @@ st.markdown("""
     }
     .stButton > button:hover {
         transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
-
-    /* Metrik Kutuları */
     div[data-testid="stMetric"] {
         background-color: #f8fafc;
         border: 1px solid #e2e8f0;
@@ -95,35 +104,91 @@ st.markdown("""
         text-align: center;
     }
     div[data-testid="stMetricLabel"] {
-        color: #64748b;
+        color: var(--muted-light);
         font-size: 0.9rem;
     }
     div[data-testid="stMetricValue"] {
-        color: #0f172a;
+        color: var(--text-light);
         font-size: 1.8rem;
         font-weight: 700;
     }
-
-    /* Header Renkleri */
     h1, h2, h3 {
-        color: #1e293b;
+        color: var(--text-light);
     }
-    
-    /* Sidebar Güzelleştirme */
     section[data-testid="stSidebar"] {
-        background-color: #f8fafc;
-        border-right: 1px solid #e2e8f0;
+        background-color: var(--sidebar-light);
+        border-right: 1px solid var(--border-light);
+    }
+    section[data-testid="stSidebar"] * {
+        color: var(--text-light);
     }
 
+    /* DARK THEME OVERRIDES */
+    body[data-theme="dark"], [data-theme="dark"] .block-container {
+        color: var(--text-dark);
+    }
+    body[data-theme="dark"] .stCard {
+        background-color: var(--surface-dark);
+        border-color: var(--border-dark);
+        color: var(--text-dark);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    }
+    body[data-theme="dark"] .login-box {
+        background-color: var(--surface-dark);
+        border-color: var(--border-dark);
+        color: var(--text-dark);
+        box-shadow: 0 15px 35px rgba(0,0,0,0.45);
+    }
+    body[data-theme="dark"] div[data-testid="stMetric"] {
+        background-color: #0f172a;
+        border-color: #1f2937;
+    }
+    body[data-theme="dark"] div[data-testid="stMetricLabel"] {
+        color: var(--muted-dark);
+    }
+    body[data-theme="dark"] div[data-testid="stMetricValue"],
+    body[data-theme="dark"] h1,
+    body[data-theme="dark"] h2,
+    body[data-theme="dark"] h3,
+    body[data-theme="dark"] p,
+    body[data-theme="dark"] label {
+        color: var(--text-dark);
+    }
+    body[data-theme="dark"] section[data-testid="stSidebar"] {
+        background-color: var(--sidebar-dark);
+        border-right: 1px solid var(--border-dark);
+    }
+    body[data-theme="dark"] section[data-testid="stSidebar"] * {
+        color: var(--text-dark) !important;
+    }
+    body[data-theme="dark"] .stButton > button {
+        color: var(--text-dark);
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        background-color: #1d4ed8;
+    }
+    body[data-theme="dark"] .stButton > button:hover {
+        box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35);
+    }
+    body[data-theme="dark"] .stSelectbox > div,
+    body[data-theme="dark"] .stTextInput > div > div,
+    body[data-theme="dark"] .stNumberInput > div > div {
+        background-color: #0f172a !important;
+        border-color: #1f2937 !important;
+        color: var(--text-dark) !important;
+    }
+    body[data-theme="dark"] .stTextInput input,
+    body[data-theme="dark"] .stNumberInput input,
+    body[data-theme="dark"] .stTextArea textarea {
+        color: var(--text-dark) !important;
+    }
+    body[data-theme="dark"] .stMarkdown, body[data-theme="dark"] .stCaption {
+        color: var(--text-dark);
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # ================== FONKSİYONLAR ==================
 def load_json(filename):
-    """
-    HISTORY / TEMPLATE gibi dosyaları okur.
-    - Bulunamazsa: history/template için [] döner, diğerleri için {}.
-    """
     if not os.path.exists(filename):
         return [] if ("gecmisi" in filename or "sablon" in filename) else {}
     try:
@@ -133,10 +198,6 @@ def load_json(filename):
         return [] if ("gecmisi" in filename or "sablon" in filename) else {}
 
 def save_json(filename, data, mode="w"):
-    """
-    mode="w": direkt yazar
-    mode="a": mevcut listeye append eder
-    """
     if mode == "a" and os.path.exists(filename):
         current = load_json(filename)
         if isinstance(current, list):
@@ -201,6 +262,37 @@ def save_blacklist(blacklist_set):
     data = sorted(list(set(str(e).lower() for e in blacklist_set)))
     save_json(BLACKLIST_FILE, data, mode="w")
 
+def worldpass_login(email: str, password: str):
+    """
+    WorldPass backend login.
+    Beklenen cevap:
+    {
+        "token": "...",
+        "user": {
+            "id": ...,
+            "email": "...",
+            "first_name": "...",
+            "last_name": "...",
+            "did": "...",
+            "email_verified": false
+        }
+    }
+    """
+    try:
+        resp = requests.post(
+            WORLDPASS_LOGIN_URL,
+            json={"email": email, "password": password},
+            timeout=10
+        )
+        if resp.status_code != 200:
+            return None, f"WorldPass login başarısız: HTTP {resp.status_code}"
+        data = resp.json()
+        if "user" not in data:
+            return None, "WorldPass cevabında 'user' alanı yok."
+        return data, None
+    except Exception as e:
+        return None, f"WorldPass isteği hata verdi: {e}"
+
 # ================== STATE YÖNETİMİ ==================
 if "current_user" not in st.session_state:
     st.session_state.current_user = None
@@ -237,28 +329,22 @@ if not config_data or not isinstance(config_data, dict):
 
 # ================== LOGIN EKRANI ==================
 if not st.session_state.current_user:
-    # Eğer hiç kullanıcı yoksa Admin oluştur
+    # Kullanıcı yoksa kullanıcıyı config'e manuel eklemesi istenir
     if not config_data.get("users"):
-        st.markdown("<div class='login-box'><h2>🔐 Yönetici Kurulumu</h2>", unsafe_allow_html=True)
-        with st.form("setup_admin"):
-            st.info("Sistemi kullanmak için ilk yönetici hesabını oluşturun.")
-            u = st.text_input("Kullanıcı Adı")
-            p = st.text_input("Şifre", type="password")
-            submitted = st.form_submit_button("Kurulumu Tamamla", type="primary")
-            if submitted:
-                if u and p:
-                    config_data["users"].append(
-                        {"username": u, "password_hash": hash_password(p), "role": "admin"}
-                    )
-                    save_json(CONFIG_FILE, config_data)
-                    st.success("Yönetici oluşturuldu! Lütfen giriş yapın.")
-                    st.rerun()
-                else:
-                    st.error("Alanlar boş bırakılamaz.")
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("<div class='login-box'><h2>🔐 Yönetici Gerekli</h2>", unsafe_allow_html=True)
+        example_hash = hash_password("admin123")
+        st.warning(
+            "Lütfen `config_settings.json` dosyasına en az bir kullanıcı ekleyin.\n\n"
+            "Örnek kayıt:\n"
+            f"```json\n{{\"username\": \"admin\", \"password_hash\": \"{example_hash}\", \"role\": \"admin\"}}\n```"
+        )
+        st.markdown(
+            "<p style='color:#666;'>`password_hash` alanı için kendi şifrenizi `hash_password` fonksiyonundan geçirip değeri manuel yazmanız gerekir.</p></div>",
+            unsafe_allow_html=True
+        )
         st.stop()
 
-    # Normal Login
+    # Normal Login (Yerel + WorldPass)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
@@ -269,26 +355,66 @@ if not st.session_state.current_user:
             <p style='color:#666; font-size: 0.9em;'>Kurumsal iletişim ve sponsorluk yönetim sistemi</p>
         </div>
         """, unsafe_allow_html=True)
-        
-        with st.form("login_form"):
-            username = st.text_input("Kullanıcı Adı")
-            password = st.text_input("Şifre", type="password")
-            submitted = st.form_submit_button("Giriş Yap", type="primary", use_container_width=True)
-            if submitted:
-                user = get_user(config_data, username.strip())
-                if user and verify_password(password, user.get("password_hash", "")):
-                    st.session_state.current_user = {
-                        "username": user["username"],
-                        "role": user.get("role", "sender")
-                    }
-                    st.toast(f"Hoş geldin, {user['username']}!", icon="👋")
-                    time.sleep(0.3)
-                    st.rerun()
-                else:
-                    st.error("Hatalı kullanıcı adı veya şifre.")
+
+        tab_local, tab_wp = st.tabs(["Yerel Giriş", "WorldPass ile Giriş"])
+
+        # Yerel giriş
+        with tab_local:
+            with st.form("login_form_local"):
+                username = st.text_input("Kullanıcı Adı")
+                password = st.text_input("Şifre", type="password")
+                submitted = st.form_submit_button("Giriş Yap", type="primary", use_container_width=True)
+                if submitted:
+                    user = get_user(config_data, username.strip())
+                    if user and verify_password(password, user.get("password_hash", "")):
+                        st.session_state.current_user = {
+                            "username": user["username"],
+                            "role": user.get("role", "sender"),
+                            "auth_type": "local"
+                        }
+                        st.toast(f"Hoş geldin, {user['username']}!", icon="👋")
+                        time.sleep(0.3)
+                        st.rerun()
+                    else:
+                        st.error("Hatalı kullanıcı adı veya şifre.")
+
+        # WorldPass ile giriş
+        with tab_wp:
+            st.caption("WorldPass hesabınla giriş yaparak SponsorBot'a eriş.")
+            with st.form("login_form_worldpass"):
+                wp_email = st.text_input("WorldPass Email")
+                wp_pass = st.text_input("WorldPass Şifre", type="password")
+                submitted_wp = st.form_submit_button("WorldPass ile Giriş Yap", type="primary", use_container_width=True)
+                if submitted_wp:
+                    if not wp_email or not wp_pass:
+                        st.error("Email ve şifre zorunlu.")
+                    else:
+                        data, err = worldpass_login(wp_email.strip(), wp_pass)
+                        if err:
+                            st.error(err)
+                        else:
+                            user_info = data.get("user", {})
+                            email = user_info.get("email", wp_email).lower()
+
+                            # Rol mapping
+                            if email in [e.lower() for e in ADMIN_EMAILS]:
+                                mapped_role = "admin"
+                            else:
+                                mapped_role = "sender"
+
+                            st.session_state.current_user = {
+                                "username": email,
+                                "role": mapped_role,
+                                "auth_type": "worldpass",
+                                "wp_token": data.get("token"),
+                                "wp_user": user_info
+                            }
+                            st.toast("WorldPass ile giriş başarılı! 🎉", icon="✅")
+                            time.sleep(0.3)
+                            st.rerun()
     st.stop()
 
-# ================== ANA UYGULAMA (Giriş Başarılı) ==================
+# ================== ANA UYGULAMA ==================
 user = st.session_state.current_user
 role = user.get("role", "viewer")
 
@@ -323,7 +449,7 @@ with st.sidebar:
 
     st.caption("Heptapus SponsorBot © 2024")
 
-# SMTP Ekleme Modalı (Sidebar butonuyla tetikleniyor)
+# SMTP modal
 if st.session_state.get("show_smtp_form"):
     with st.form("new_smtp"):
         st.subheader("Yeni SMTP Hesabı")
@@ -348,7 +474,7 @@ if st.session_state.get("show_smtp_form"):
                 st.success("SMTP hesabı eklendi.")
                 st.rerun()
 
-# --- GLOBAL CONTEXT ---
+# GLOBAL CONTEXT
 global_ctx = {
     "TODAY": datetime.now().strftime("%d.%m.%Y"),
     "CLUB_NAME": st.session_state.club_name,
@@ -360,11 +486,11 @@ t_data, t_tmpl, t_send, t_stat = st.tabs(
     ["📂 Veri Yükle", "📝 Şablon Editörü", "🚀 Gönderim Paneli", "📊 Analitik"]
 )
 
-# Bu run için df ve email_col default
+# df / email_col başlangıç
 df = None
 email_col = None
 
-# ================== 1. VERİ SEKME ==================
+# 1. VERİ
 with t_data:
     st.markdown("### 📤 Hedef Kitle Listesi")
     st.markdown("Excel dosyanızda **Yetkili, Email, Sirket** gibi sütunların olduğundan emin olun.")
@@ -412,7 +538,7 @@ with t_data:
         except Exception as e:
             st.error(f"Dosya okunamadı: {e}")
 
-# ================== 2. ŞABLON SEKME ==================
+# 2. ŞABLON
 with t_tmpl:
     col_editor, col_preview = st.columns([2, 1])
     
@@ -459,11 +585,11 @@ with t_tmpl:
                     st.session_state.mail_subject = t_data_load.get("subject", st.session_state.mail_subject)
                     st.session_state.mail_body = t_data_load.get("body", st.session_state.mail_body)
                     st.success("Şablon yüklendi.")
-                    st.experimental_rerun()
+                    st.rerun()
         else:
             st.caption("Kayıtlı şablon bulunamadı (TEMPLATE_FILE).")
 
-# ================== 3. GÖNDERİM SEKME ==================
+# 3. GÖNDERİM
 with t_send:
     st.markdown("### 🚀 Kampanya Başlatıcı")
 
@@ -586,7 +712,7 @@ with t_send:
                             )
                             log_container.success(f"✅ {target_email} gönderildi.")
                             status_code = "SENT_OK"
-                            time.sleep(random.uniform(2, 5))  # Anti-spam bekleme
+                            time.sleep(random.uniform(2, 5))
 
                         success += 1
                     except Exception as e:
@@ -619,7 +745,7 @@ with t_send:
                 st.success(f"İşlem Tamamlandı! Toplam Başarılı: {success}, Hatalı: {fails}")
                 st.session_state.sending_active = False
 
-# ================== 4. ANALİTİK SEKME ==================
+# 4. ANALİTİK
 with t_stat:
     st.markdown("### 📊 Performans Raporu")
     hist_data = load_json(HISTORY_FILE)
@@ -679,7 +805,6 @@ with t_stat:
         st.markdown("#### Detaylı Loglar")
         st.dataframe(df_hist.sort_values("date", ascending=False), use_container_width=True)
 
-        # Blacklist yönetimi
         st.markdown("---")
         st.markdown("### 🚫 Blacklist Yönetimi")
         bl = load_blacklist()
@@ -699,7 +824,6 @@ with t_stat:
                     bl.add(new_bl.lower())
                     save_blacklist(bl)
                     st.success("Blacklist güncellendi.")
-                    st.experimental_rerun()
-
+                    st.rerun()
     else:
         st.info("Henüz gönderim geçmişi bulunmamaktadır.")

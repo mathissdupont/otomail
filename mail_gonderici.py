@@ -9,10 +9,10 @@ import time
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 import hashlib
 import hmac
-import requests
+import random
 
 # ================== AYARLAR & KONFİGÜRASYON ==================
 st.set_page_config(
@@ -26,19 +26,19 @@ st.set_page_config(
 HISTORY_FILE = "gonderim_gecmisi.json"
 CONFIG_FILE = "config_settings.json"
 TEMPLATE_FILE = "mail_sablonlari.json"
-BLACKLIST_FILE = "blacklist.json"
 
-# Admin Listesi
-ADMIN_EMAILS = ["sametutku64@gmail.com"]
-
-# Yetki Matrisi
-ROLE_PERMISSIONS = {
-    "admin": {"send": True, "edit_templates": True, "view_analytics": True},
-    "sender": {"send": True, "edit_templates": True, "view_analytics": False},
-    "viewer": {"send": False, "edit_templates": False, "view_analytics": True}
+# SMTP Sağlayıcı Ayarları (Hazır Listesi)
+SMTP_PRESETS = {
+    "Özel (Manuel Ayar)": {"host": "", "port": 587},
+    "Gmail": {"host": "smtp.gmail.com", "port": 587},
+    "Outlook / Hotmail": {"host": "smtp.office365.com", "port": 587},
+    "Yandex Mail": {"host": "smtp.yandex.com", "port": 465},
+    "IEEE (Google Altyapılı)": {"host": "smtp.gmail.com", "port": 587},
+    "Yahoo Mail": {"host": "smtp.mail.yahoo.com", "port": 587},
+    "Zoho Mail": {"host": "smtp.zoho.com", "port": 587}
 }
 
-# ================== CSS (Görünürlük ve Düzen İyileştirmeleri) ==================
+# ================== CSS (UI/UX İyileştirmeleri) ==================
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
@@ -51,10 +51,7 @@ st.markdown("""
         --input-bg: #0f172a;
     }
 
-    /* Genel Yazı ve Arka Plan */
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-    }
+    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
     /* Kart Yapısı */
     .stCard {
@@ -63,13 +60,15 @@ st.markdown("""
         border-radius: 12px;
         border: 1px solid var(--border);
         margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
 
-    /* Input Alanları (Beyaz Sorunu Çözümü) */
-    .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {
+    /* Input Alanları */
+    .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"], .stNumberInput input {
         background-color: var(--input-bg) !important;
         color: white !important;
         border-color: var(--border) !important;
+        border-radius: 8px;
     }
     
     /* Butonlar */
@@ -77,7 +76,9 @@ st.markdown("""
         width: 100%;
         border-radius: 8px;
         font-weight: 600;
+        transition: all 0.2s;
     }
+    .stButton button:hover { transform: translateY(-2px); }
 
     /* Sidebar */
     section[data-testid="stSidebar"] {
@@ -97,33 +98,24 @@ st.markdown("""
 
     /* Hero Alanı */
     .hero {
-        background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
         padding: 24px;
         border-radius: 16px;
         color: white;
         margin-bottom: 24px;
+        border: 1px solid rgba(255,255,255,0.1);
     }
     .hero h1 { color: white !important; margin: 0; font-size: 1.8rem; }
-    .hero p { color: #e0e7ff !important; margin: 5px 0 0; }
-    
-    /* Etiketler */
-    .tag-pill {
-        background: #334155; color: #cbd5e1; 
-        padding: 2px 8px; border-radius: 4px; 
-        font-size: 0.85rem; margin-right: 5px; font-family: monospace;
-    }
+    .hero p { color: #dbeafe !important; margin: 5px 0 0; }
 </style>
 """, unsafe_allow_html=True)
 
 # ================== YARDIMCI FONKSİYONLAR ==================
 def load_json(filename):
-    if not os.path.exists(filename):
-        return [] if "gecmisi" in filename or "sablon" in filename else {}
+    if not os.path.exists(filename): return [] if "gecmisi" in filename or "sablon" in filename else {}
     try:
-        with open(filename, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except:
-        return [] if "gecmisi" in filename or "sablon" in filename else {}
+        with open(filename, "r", encoding="utf-8") as f: return json.load(f)
+    except: return [] if "gecmisi" in filename or "sablon" in filename else {}
 
 def save_json(filename, data):
     with open(filename, "w", encoding="utf-8") as f:
@@ -138,12 +130,8 @@ def verify_password(password: str, password_hash: str) -> bool:
 def render_template(text, row_data, global_ctx):
     if not text: return ""
     res = str(text)
-    # Excel verilerini işle
-    for k, v in row_data.items():
-        res = res.replace(f"{{{k}}}", str(v))
-    # Global değişkenleri işle
-    for k, v in global_ctx.items():
-        res = res.replace(f"{{{k}}}", str(v))
+    for k, v in row_data.items(): res = res.replace(f"{{{k}}}", str(v))
+    for k, v in global_ctx.items(): res = res.replace(f"{{{k}}}", str(v))
     return res
 
 def is_valid_email(email):
@@ -158,14 +146,12 @@ if "loaded_data" not in st.session_state: st.session_state.loaded_data = None
 if "email_column" not in st.session_state: st.session_state.email_column = None
 
 config = load_json(CONFIG_FILE)
-# Eğer config boşsa default oluştur
-if not config:
-    config = {"users": [], "smtp_defaults": {"server": "smtp.gmail.com", "port": 587}}
+if not config: config = {"users": [], "smtp_defaults": {"server": "smtp.gmail.com", "port": 587}}
 
 # ================== 1. GİRİŞ EKRANI ==================
 if not st.session_state.current_user:
     if not config.get("users"):
-        st.warning("⚠️ Hiç kullanıcı yok. Lütfen config_settings.json dosyasına manuel kullanıcı ekleyin.")
+        st.warning("⚠️ Kullanıcı yok. config_settings.json'a kullanıcı ekleyin.")
         st.stop()
 
     c1, c2, c3 = st.columns([1, 2, 1])
@@ -193,7 +179,7 @@ global_ctx = {
     "CLUB": "Heptapus Group"
 }
 
-# --- SIDEBAR ---
+# --- SIDEBAR (Gelişmiş SMTP Yönetimi) ---
 with st.sidebar:
     st.markdown(f"### 👤 {user['username']}")
     st.caption(f"Yetki: {role.upper()}")
@@ -203,201 +189,186 @@ with st.sidebar:
         st.rerun()
     
     st.markdown("---")
-    st.markdown("### ⚙️ Hızlı Ayarlar")
+    st.markdown("### 📧 Gönderici Ayarları")
     
-    # SMTP Yönetimi
-    with st.expander("SMTP Hesapları", expanded=False):
-        srv = st.text_input("Host", "smtp.gmail.com")
-        prt = st.number_input("Port", 587)
-        em = st.text_input("Email")
-        pw = st.text_input("App Şifresi", type="password")
-        if st.button("Hesap Ekle"):
-            st.session_state.smtp_accounts.append({"server": srv, "port": prt, "email": em, "password": pw})
-            st.success("SMTP Eklendi!")
-    
+    with st.expander("➕ Yeni Hesap Ekle", expanded=False):
+        # Hazır Sağlayıcı Seçimi
+        provider = st.selectbox("E-posta Sağlayıcısı", list(SMTP_PRESETS.keys()))
+        
+        # Seçime göre defaultları doldur
+        default_host = SMTP_PRESETS[provider]["host"]
+        default_port = SMTP_PRESETS[provider]["port"]
+        
+        srv = st.text_input("SMTP Sunucusu", value=default_host)
+        prt = st.number_input("Port", value=default_port)
+        
+        st.caption("Giriş Bilgileri")
+        em = st.text_input("E-posta Adresi")
+        pw = st.text_input("Uygulama Şifresi", type="password", help="Gmail/Outlook için 'App Password' oluşturmanız gerekebilir.")
+        
+        if st.button("Kaydet ve Test Et"):
+            if not em or not pw:
+                st.error("E-posta ve şifre zorunlu.")
+            else:
+                try:
+                    # Bağlantı testi
+                    s = smtplib.SMTP(srv, prt)
+                    s.starttls()
+                    s.login(em, pw)
+                    s.quit()
+                    
+                    st.session_state.smtp_accounts.append({"server": srv, "port": prt, "email": em, "password": pw})
+                    st.success("✅ Bağlantı başarılı! Hesap eklendi.")
+                    time.sleep(1)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Bağlantı Hatası: {e}")
+
+    # Ekli Hesapları Listele
     if st.session_state.smtp_accounts:
-        st.success(f"✅ {len(st.session_state.smtp_accounts)} SMTP Aktif")
+        st.markdown("#### Aktif Hesaplar")
+        for i, acc in enumerate(st.session_state.smtp_accounts):
+            with st.container():
+                c1, c2 = st.columns([4, 1])
+                c1.code(acc['email'])
+                if c2.button("Sil", key=f"del_{i}"):
+                    st.session_state.smtp_accounts.pop(i)
+                    st.rerun()
     else:
-        st.warning("⚠️ SMTP Yok")
+        st.warning("⚠️ Henüz gönderici hesabı eklenmedi.")
 
 # --- HEADER ---
 st.markdown(f"""
 <div class='hero'>
     <h1>Heptapus Kontrol Paneli</h1>
-    <p>Hoş geldin, {user['username']}. Kampanyalarını yönetmeye başla.</p>
+    <p>Akıllı zamanlama ve kolay gönderim arayüzü.</p>
 </div>
 """, unsafe_allow_html=True)
 
 # --- SEKMELER ---
 tab_data, tab_template, tab_send, tab_logs = st.tabs([
-    "📂 1. Veri Yükle", 
-    "📝 2. Şablon & Kayıt", 
-    "🚀 3. Gönderim", 
+    "📂 1. Hedef Kitle", 
+    "📝 2. İçerik Tasarımı", 
+    "⏱️ 3. Planla & Gönder", 
     "📊 4. Raporlar"
 ])
 
-# ================== TAB 1: VERİ YÜKLEME ==================
+# ================== TAB 1: VERİ ==================
 with tab_data:
     col_up, col_stat = st.columns([1, 1])
-    
     with col_up:
         st.markdown("<div class='stCard'>", unsafe_allow_html=True)
-        st.subheader("Excel Dosyası")
-        uploaded_file = st.file_uploader("Excel (.xlsx) dosyasını buraya bırak", type=["xlsx"])
-        
+        st.subheader("Excel Yükle")
+        uploaded_file = st.file_uploader("Dosya Seç (.xlsx)", type=["xlsx"])
         if uploaded_file:
             try:
                 df = pd.read_excel(uploaded_file).fillna("").astype(str)
                 st.session_state.loaded_data = df
-                st.success("Dosya başarıyla okundu!")
+                st.success(f"{len(df)} kayıt yüklendi.")
             except Exception as e:
                 st.error(f"Hata: {e}")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col_stat:
         st.markdown("<div class='stCard'>", unsafe_allow_html=True)
-        st.subheader("Veri Analizi")
+        st.subheader("Sütun Eşleştirme")
         if st.session_state.loaded_data is not None:
             df = st.session_state.loaded_data
-            cols = df.columns.tolist()
-            st.session_state.email_column = st.selectbox("Hangi sütun E-posta içeriyor?", cols)
-            
-            # Analiz
-            valid_mails = df[st.session_state.email_column].apply(is_valid_email).sum()
-            
-            m1, m2 = st.columns(2)
-            m1.metric("Toplam Satır", len(df))
-            m2.metric("Geçerli Email", valid_mails)
-            
-            st.caption("İlk 3 Satır:")
+            st.session_state.email_column = st.selectbox("E-posta Sütunu", df.columns)
+            valid = df[st.session_state.email_column].apply(is_valid_email).sum()
+            st.metric("Gönderilebilir Mail Sayısı", valid, f"Toplam: {len(df)}")
             st.dataframe(df.head(3), use_container_width=True)
         else:
-            st.info("Lütfen önce sol taraftan dosya yükle.")
+            st.info("Veri bekleniyor...")
         st.markdown("</div>", unsafe_allow_html=True)
 
-# ================== TAB 2: ŞABLON SİSTEMİ (YENİLENDİ) ==================
+# ================== TAB 2: ŞABLON ==================
 with tab_template:
-    col_editor, col_manager = st.columns([2, 1])
-
-    # --- EDİTÖR KISMI ---
-    with col_editor:
+    col_ed, col_man = st.columns([2, 1])
+    with col_ed:
         st.markdown("<div class='stCard'>", unsafe_allow_html=True)
-        st.subheader("✏️ İçerik Editörü")
-        
-        st.info("Değişken Kullanımı: {Yetkili}, {Sirket}, {TODAY} şeklinde yazarsan Excel'den otomatik çeker.")
-        
-        st.session_state.mail_subject = st.text_input("Konu Başlığı", st.session_state.mail_subject)
-        st.session_state.mail_body = st.text_area("Mail İçeriği (HTML destekler)", st.session_state.mail_body, height=350)
-        
-        st.subheader("📎 Dosya Ekleri")
-        st.session_state.files = st.file_uploader("PDF/Görsel Ekle", accept_multiple_files=True)
+        st.subheader("E-posta İçeriği")
+        st.session_state.mail_subject = st.text_input("Konu", st.session_state.mail_subject)
+        st.session_state.mail_body = st.text_area("İçerik (HTML)", st.session_state.mail_body, height=300)
+        st.session_state.files = st.file_uploader("Dosya Ekleri", accept_multiple_files=True)
         st.markdown("</div>", unsafe_allow_html=True)
-
-    # --- YÖNETİCİ KISMI (KAYDET/YÜKLE) ---
-    with col_manager:
+    
+    with col_man:
         st.markdown("<div class='stCard'>", unsafe_allow_html=True)
-        st.subheader("💾 Şablon Yönetimi")
-        
-        # Mevcut şablonları yükle
+        st.subheader("Hızlı İşlemler")
         templates = load_json(TEMPLATE_FILE)
-        template_names = [t["name"] for t in templates]
         
-        # 1. Şablon Yükle
-        st.markdown("#### Şablon Yükle")
-        if template_names:
-            selected_load = st.selectbox("Kayıtlı Şablonlar", template_names)
-            if st.button("📥 Seçili Şablonu Getir"):
-                found = next((t for t in templates if t["name"] == selected_load), None)
-                if found:
-                    st.session_state.mail_subject = found["subject"]
-                    st.session_state.mail_body = found["body"]
-                    st.success(f"'{selected_load}' şablonu yüklendi!")
-                    time.sleep(1)
+        # Şablon Yükle
+        if templates:
+            secilen = st.selectbox("Şablon Seç", [t["name"] for t in templates])
+            if st.button("Şablonu Uygula"):
+                t = next((x for x in templates if x["name"] == secilen), None)
+                if t:
+                    st.session_state.mail_subject = t["subject"]
+                    st.session_state.mail_body = t["body"]
                     st.rerun()
-        else:
-            st.caption("Henüz kayıtlı şablon yok.")
-            
-        st.markdown("---")
         
-        # 2. Şablon Kaydet
-        st.markdown("#### Yeni Olarak Kaydet")
-        new_temp_name = st.text_input("Şablon Adı Ver", placeholder="Örn: Sponsorluk Q1")
-        if st.button("💾 Şablonu Kaydet"):
-            if not new_temp_name:
-                st.error("Lütfen bir isim ver.")
-            else:
-                new_entry = {
-                    "name": new_temp_name,
-                    "subject": st.session_state.mail_subject,
-                    "body": st.session_state.mail_body,
-                    "date": str(datetime.now())
-                }
-                # Aynı isim varsa güncelle, yoksa ekle
-                templates = [t for t in templates if t["name"] != new_temp_name]
-                templates.append(new_entry)
-                save_json(TEMPLATE_FILE, templates)
-                st.success(f"'{new_temp_name}' başarıyla kaydedildi!")
-                time.sleep(1)
-                st.rerun()
-
-        # 3. Şablon Sil
-        st.markdown("---")
-        st.markdown("#### Şablon Sil")
-        to_delete = st.selectbox("Silinecek Şablon", ["Seçiniz"] + template_names)
-        if st.button("🗑️ Sil"):
-            if to_delete != "Seçiniz":
-                templates = [t for t in templates if t["name"] != to_delete]
-                save_json(TEMPLATE_FILE, templates)
-                st.warning("Şablon silindi.")
-                time.sleep(1)
-                st.rerun()
+        # Kaydet
+        st.divider()
+        new_name = st.text_input("Yeni Şablon Adı")
+        if st.button("Kaydet"):
+            templates.append({"name": new_name, "subject": st.session_state.mail_subject, "body": st.session_state.mail_body})
+            save_json(TEMPLATE_FILE, templates)
+            st.success("Kaydedildi!")
+            st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-# ================== TAB 3: GÖNDERİM ==================
+# ================== TAB 3: GÖNDERİM (ZAMANLAYICI EKLENDİ) ==================
 with tab_send:
     st.markdown("<div class='stCard'>", unsafe_allow_html=True)
     
-    # Kontroller
-    ready = True
-    if st.session_state.loaded_data is None:
-        st.error("❌ Önce Veri Yükle sekmesinden dosya yükle.")
-        ready = False
-    if not st.session_state.smtp_accounts:
-        st.error("❌ Yan menüden en az bir SMTP hesabı ekle.")
-        ready = False
-    
-    if ready:
-        c1, c2 = st.columns(2)
-        campaign_name = c1.text_input("Kampanya İsmi", "Genel Gönderim")
-        is_dry_run = c2.toggle("Dry Run (Simülasyon)", value=True, help="Açıkken mail gitmez, sadece test eder.")
+    if st.session_state.loaded_data is None or not st.session_state.smtp_accounts:
+        st.warning("⚠️ Lütfen önce Veri Yükleyin ve Hesap Ekleyin.")
+    else:
+        c1, c2, c3 = st.columns([2, 1, 1])
+        camp_name = c1.text_input("Kampanya Adı", "Kampanya 1")
+        is_dry_run = c2.toggle("Dry Run (Test)", value=True)
+        enable_schedule = c3.toggle("🕒 Zamanla", value=False)
+
+        start_time = datetime.now()
         
-        if is_dry_run:
-            st.info("📢 Şu an SİMÜLASYON modundasın. Mail gitmeyecek, sadece loglar oluşacak.")
-        else:
-            st.warning("🚨 DİKKAT: Gerçek gönderim modu açık. Mailler gidecek!")
+        # Zamanlayıcı UI
+        if enable_schedule:
+            st.info("ℹ️ Zamanlayıcı çalışırken bu sekmeyi kapatmayın. Arka planda saymaya devam edecektir.")
+            sc1, sc2 = st.columns(2)
+            sch_date = sc1.date_input("Tarih", datetime.now())
+            sch_time = sc2.time_input("Saat", (datetime.now() + timedelta(minutes=10)).time())
+            start_time = datetime.combine(sch_date, sch_time)
+            
+            if start_time < datetime.now():
+                st.error("Lütfen ileri bir tarih seçin.")
 
-        # Önizleme (Canlı)
-        with st.expander("Gidecek Mail Önizlemesi (İlk Kayıt)", expanded=True):
-            if st.session_state.loaded_data is not None:
-                first_row = st.session_state.loaded_data.iloc[0].to_dict()
-                prev_s = render_template(st.session_state.mail_subject, first_row, global_ctx)
-                prev_b = render_template(st.session_state.mail_body, first_row, global_ctx)
-                st.markdown(f"**Konu:** {prev_s}")
-                st.markdown(f"**Kime:** {first_row.get(st.session_state.email_column, 'Bilinmiyor')}")
-                st.markdown("---")
-                st.components.v1.html(prev_b, height=300, scrolling=True)
+        st.divider()
+        
+        # Başlat Butonu
+        btn_text = f"⏳ {start_time.strftime('%d.%m %H:%M')} İçin Planla" if enable_schedule else "🚀 Hemen Gönder"
+        
+        if st.button(btn_text, type="primary"):
+            # Zamanlayıcı Bekleme Döngüsü
+            if enable_schedule:
+                placeholder = st.empty()
+                while datetime.now() < start_time:
+                    diff = start_time - datetime.now()
+                    placeholder.warning(f"⏳ Gönderime kalan süre: {str(diff).split('.')[0]} \n\n⚠️ Lütfen tarayıcıyı kapatmayın!")
+                    time.sleep(1)
+                placeholder.empty()
 
-        if st.button("🚀 GÖNDERİMİ BAŞLAT", type="primary"):
+            # GÖNDERİM BAŞLIYOR
+            st.toast("Gönderim işlemi başladı!")
+            status_container = st.status("Gönderim Durumu", expanded=True)
             df_target = st.session_state.loaded_data
             total = len(df_target)
-            bar = st.progress(0)
-            log_container = st.container()
+            bar = status_container.progress(0)
             
-            success_count = 0
-            fail_count = 0
-            history_logs = []
+            success = 0
+            logs = []
             
-            # SMTP Bağlantıları
+            # SMTP Bağlantılarını Hazırla
             conns = []
             if not is_dry_run:
                 for acc in st.session_state.smtp_accounts:
@@ -405,42 +376,38 @@ with tab_send:
                         s = smtplib.SMTP(acc['server'], acc['port'])
                         s.starttls()
                         s.login(acc['email'], acc['password'])
-                        conns.append({"conn": s, "email": acc['email']})
-                    except Exception as e:
-                        st.error(f"SMTP Hatası ({acc['email']}): {e}")
+                        conns.append({"c": s, "e": acc['email']})
+                    except: pass
             
-            # Eğer gerçek gönderimse ve conn yoksa dur
             if not is_dry_run and not conns:
-                st.error("Aktif SMTP bağlantısı kurulamadı!")
+                status_container.error("SMTP Bağlantısı kurulamadı!")
                 st.stop()
 
-            # Döngü
+            # Loop
             for i, row in df_target.iterrows():
                 email = str(row[st.session_state.email_column]).strip()
-                
-                # Render
                 subj = render_template(st.session_state.mail_subject, row.to_dict(), global_ctx)
                 body = render_template(st.session_state.mail_body, row.to_dict(), global_ctx)
                 
-                status = "UNKNOWN"
+                stat_code = "UNKNOWN"
                 
                 if is_dry_run:
-                    time.sleep(0.1)
-                    log_container.info(f"🔁 [Dry-Run] {email} işlendi.")
-                    status = "SIMULATED"
-                    success_count += 1
+                    status_container.write(f"📝 [Test] {email} hazırlandı.")
+                    stat_code = "SIMULATED"
+                    time.sleep(0.05)
                 else:
                     try:
-                        # Round-robin SMTP seçimi
-                        active = conns[i % len(conns)]
+                        # Random Delay (Anti-Spam)
+                        delay = random.uniform(2.0, 5.0) 
+                        time.sleep(delay)
                         
+                        acc = conns[i % len(conns)]
                         msg = MIMEMultipart()
-                        msg['From'] = active['email']
+                        msg['From'] = acc['e']
                         msg['To'] = email
                         msg['Subject'] = subj
                         msg.attach(MIMEText(body, 'html'))
                         
-                        # Dosya Ekleri
                         if st.session_state.files:
                             for f in st.session_state.files:
                                 part = MIMEBase('application', 'octet-stream')
@@ -448,63 +415,39 @@ with tab_send:
                                 encoders.encode_base64(part)
                                 part.add_header('Content-Disposition', f"attachment; filename={f.name}")
                                 msg.attach(part)
-
-                        active['conn'].sendmail(active['email'], email, msg.as_string())
-                        
-                        log_container.success(f"✅ Gönderildi: {email}")
-                        status = "SENT_OK"
-                        success_count += 1
-                        time.sleep(1) # Spam önleme
+                                
+                        acc['c'].sendmail(acc['e'], email, msg.as_string())
+                        status_container.write(f"✅ Gönderildi: {email} (Gecikme: {delay:.1f}s)")
+                        stat_code = "SENT_OK"
+                        success += 1
                     except Exception as e:
-                        log_container.error(f"❌ Hata ({email}): {e}")
-                        status = "ERROR"
-                        fail_count += 1
-                
-                history_logs.append({
-                    "date": str(datetime.now()),
-                    "email": email,
-                    "status": status,
-                    "campaign": campaign_name
-                })
-                
-                bar.progress((i + 1) / total)
+                        status_container.write(f"❌ Hata {email}: {e}")
+                        stat_code = "ERROR"
 
-            # Kaydet ve Temizle
+                logs.append({"date": str(datetime.now()), "email": email, "status": stat_code, "campaign": camp_name})
+                bar.progress((i+1)/total)
+
+            # Bitiş
             if not is_dry_run:
-                # Bağlantıları kapat
-                for c in conns: c['conn'].quit()
-                
-                # Geçmişe yaz
+                for c in conns: c['c'].quit()
                 existing = load_json(HISTORY_FILE)
-                existing.extend(history_logs)
+                existing.extend(logs)
                 save_json(HISTORY_FILE, existing)
-            
-            st.success(f"İşlem Tamamlandı! Başarılı: {success_count}, Hatalı: {fail_count}")
 
+            status_container.update(label=f"Tamamlandı! {success}/{total} Başarılı", state="complete")
+            st.balloons()
+            
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ================== TAB 4: RAPORLAR ==================
+# ================== TAB 4: RAPOR ==================
 with tab_logs:
     st.markdown("<div class='stCard'>", unsafe_allow_html=True)
-    history_data = load_json(HISTORY_FILE)
-    
-    if history_data:
-        df_hist = pd.DataFrame(history_data)
-        
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Toplam Gönderim", len(df_hist))
-        c2.metric("Başarılı", len(df_hist[df_hist['status'] == 'SENT_OK']))
-        c3.metric("Hatalı", len(df_hist[df_hist['status'] == 'ERROR']))
-        
-        st.markdown("#### Detaylı Loglar")
-        st.dataframe(df_hist, use_container_width=True)
-        
-        st.download_button(
-            "📥 Raporu İndir (CSV)",
-            df_hist.to_csv(index=False).encode('utf-8'),
-            "gonderim_raporu.csv",
-            "text/csv"
-        )
+    hist = load_json(HISTORY_FILE)
+    if hist:
+        df_h = pd.DataFrame(hist)
+        st.metric("Toplam Log", len(df_h))
+        st.dataframe(df_h, use_container_width=True)
+        st.download_button("İndir CSV", df_h.to_csv().encode('utf-8'), "rapor.csv", "text/csv")
     else:
-        st.info("Henüz gönderim geçmişi yok.")
+        st.info("Kayıt yok.")
     st.markdown("</div>", unsafe_allow_html=True)

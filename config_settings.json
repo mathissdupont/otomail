@@ -11,8 +11,13 @@
       "password_hash": "4d1d1c2e095614c9d39b79ff5d5f46e66022319484f2002938188bca60f0c11a",
       "role": "admin"
     },
-	{
+	  {
       "username": "mutlugursel",
+      "password_hash": "76a5fb968b4d78e878d2a2d5727e79a9adb88d3cf8df98c86ce52bfa2315ee81",
+      "role": "sender"
+    },
+    {
+      "username": "b4yz4",
       "password_hash": "76a5fb968b4d78e878d2a2d5727e79a9adb88d3cf8df98c86ce52bfa2315ee81",
       "role": "sender"
     }

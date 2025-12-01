@@ -450,8 +450,15 @@ with tab_send:
         if enable_schedule:
             st.info("ℹ️ Zamanlayıcı çalışırken bu sekmeyi kapatmayın.")
             sc1, sc2 = st.columns(2)
-            sch_date = sc1.date_input("Tarih", datetime.now(IST_TZ).date())
-            sch_time = sc2.time_input("Saat", (datetime.now(IST_TZ) + timedelta(minutes=10)).time())
+            
+            # Default değerleri session state'te sakla
+            if "schedule_date" not in st.session_state:
+                st.session_state.schedule_date = datetime.now(IST_TZ).date()
+            if "schedule_time" not in st.session_state:
+                st.session_state.schedule_time = (datetime.now(IST_TZ) + timedelta(minutes=10)).time()
+            
+            sch_date = sc1.date_input("Tarih", value=st.session_state.schedule_date, key="schedule_date")
+            sch_time = sc2.time_input("Saat", value=st.session_state.schedule_time, key="schedule_time")
             start_time = datetime.combine(sch_date, sch_time).replace(tzinfo=IST_TZ)
             
             if start_time < datetime.now(IST_TZ):

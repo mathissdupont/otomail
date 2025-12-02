@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 import hashlib
 import hmac
 import random
+import mimetypes
 import requests # WorldPass için gerekli
 
 # ================== AYARLAR & KONFİGÜRASYON ==================
@@ -40,7 +41,7 @@ SMTP_PRESETS = {
     "Özel (Manuel Ayar)": {"host": "", "port": 587},
     "Gmail": {"host": "smtp.gmail.com", "port": 587},
     "Outlook / Hotmail": {"host": "smtp.office365.com", "port": 587},
-    "Yandex Mail": {"host": "smtp.yandex.com", "port": 465},
+    "Yandex Mail": {"host": "smtp.yandex.com", "port": 587},
     "IEEE (Google Altyapılı)": {"host": "smtp.gmail.com", "port": 587},
     "Yahoo Mail": {"host": "smtp.mail.yahoo.com", "port": 587},
     "Zoho Mail": {"host": "smtp.zoho.com", "port": 587}
@@ -301,8 +302,11 @@ with st.sidebar:
                 st.error("E-posta ve şifre zorunlu.")
             else:
                 try:
-                    s = smtplib.SMTP(srv, prt)
-                    s.starttls()
+                    if prt == 465:
+                        s = smtplib.SMTP_SSL(srv, prt)
+                    else:
+                        s = smtplib.SMTP(srv, prt)
+                        s.starttls()
                     s.login(em, pw)
                     s.quit()
                     
@@ -428,6 +432,8 @@ with tab_send:
     
     if st.session_state.loaded_data is None or not st.session_state.smtp_accounts:
         st.warning("⚠️ Lütfen önce Veri Yükleyin ve Hesap Ekleyin.")
+    elif not st.session_state.email_column:
+        st.warning("⚠️ Lütfen 'Hedef Kitle' sekmesinden e-posta sütununu seçin.")
     else:
         c1, c2, c3 = st.columns([2, 1, 1])
         camp_name = c1.text_input("Kampanya Adı", "Kampanya 1")
@@ -494,8 +500,11 @@ with tab_send:
             if not is_dry_run:
                 for acc in st.session_state.smtp_accounts:
                     try:
-                        s = smtplib.SMTP(acc['server'], acc['port'])
-                        s.starttls()
+                        if acc['port'] == 465:
+                            s = smtplib.SMTP_SSL(acc['server'], acc['port'])
+                        else:
+                            s = smtplib.SMTP(acc['server'], acc['port'])
+                            s.starttls()
                         s.login(acc['email'], acc['password'])
                         conns.append({"c": s, "e": acc['email']})
                     except: pass
@@ -532,11 +541,23 @@ with tab_send:
                         msg.attach(MIMEText(body, 'html'))
                         
                         if st.session_state.files:
-                            for f in st.session_state.files:
-                                part = MIMEBase('application', 'octet-stream')
-                                part.set_payload(f.getvalue())
+                            for uploaded_file in st.session_state.files:
+                                # Her dosya için pointer'ı başa al
+                                uploaded_file.seek(0)
+                                file_data = uploaded_file.read()
+                                file_name = uploaded_file.name if uploaded_file.name else "attachment"
+                                
+                                # MIME tipini otomatik algıla
+                                mime_type, _ = mimetypes.guess_type(file_name)
+                                if mime_type:
+                                    maintype, subtype = mime_type.split('/', 1)
+                                    part = MIMEBase(maintype, subtype)
+                                else:
+                                    part = MIMEBase('application', 'octet-stream')
+                                
+                                part.set_payload(file_data)
                                 encoders.encode_base64(part)
-                                part.add_header('Content-Disposition', f"attachment; filename={f.name}")
+                                part.add_header('Content-Disposition', f'attachment; filename="{file_name}"')
                                 msg.attach(part)
                                 
                         recipients = [email] + cc_list
